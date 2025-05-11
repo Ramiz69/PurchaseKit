@@ -7,6 +7,8 @@
 
 import Foundation
 
+/// All error cases thrown by the SDK.
+/// See <doc:PurchasesError>
 public enum PurchasesError: Error, Sendable {
     case notConfigured
     case invalidProductID(String)

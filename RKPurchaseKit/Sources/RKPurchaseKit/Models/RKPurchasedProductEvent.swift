@@ -7,6 +7,8 @@
 
 import Foundation
 
+/// Event emitted through ``PurchasesManager/purchasedProducts``.
+/// - See <doc:PurchasedProductEvent>
 public struct PurchasedProductEvent: Sendable {
     public let product: StoreProduct
 }

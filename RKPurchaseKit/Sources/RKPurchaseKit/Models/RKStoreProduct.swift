@@ -7,6 +7,8 @@
 
 import Foundation
 
+/// Immutable value describing a `StoreKit` product.
+/// See <doc:StoreProduct> for full details.
 public struct StoreProduct: Sendable {
 
     // MARK: Properties
@@ -43,7 +45,9 @@ public struct StoreProduct: Sendable {
     }
 
     // MARK: Internal methods
-
+    
+    /// Convenience copy-initializer that toggles the `isPurchased` flag.
+    /// - Returns: New ``StoreProduct`` instance.
     func setPurchasingFlag(_ isPurchased: Bool) -> StoreProduct {
         StoreProduct(
             productID: productID,

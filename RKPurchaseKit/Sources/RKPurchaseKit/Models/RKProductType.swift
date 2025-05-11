@@ -8,6 +8,8 @@
 import Foundation
 import StoreKit
 
+/// Maps ``StoreKit.Product.ProductType`` into an SDK-level enum.
+/// - See <doc:ProductType>
 public enum ProductType: Sendable {
     case nonConsumable
     case consumable

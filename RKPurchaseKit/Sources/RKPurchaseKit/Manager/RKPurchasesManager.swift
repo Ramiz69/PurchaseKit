@@ -8,6 +8,8 @@
 import Foundation
 import StoreKit
 
+/// ``PurchasesManager`` – entry point to `RKPurchaseKit`
+/// See <doc:PurchasesManager> for an overview and API map.
 public actor PurchasesManager: PurchasesProtocol {
 
     // MARK: Properties
@@ -18,13 +20,6 @@ public actor PurchasesManager: PurchasesProtocol {
         }
 
         return instance
-    }
-    public static var isolated: PurchasesManager {
-        get async throws {
-            guard let instance else { throw PurchasesError.notConfigured }
-
-            return instance
-        }
     }
     public nonisolated let purchasedProducts: AsyncStream<PurchasedProductEvent>
     private let identifiers: [String]
@@ -48,7 +43,10 @@ public actor PurchasesManager: PurchasesProtocol {
     }
 
     // MARK: Public methods
-
+    /// Creates the singleton and starts the `StoreKit` listener.
+    /// - SeeAlso: ``PurchasesManager/shared``
+    /// - Parameters:
+    ///   - identifiers: Product IDs registered in App Store Connect.
     @discardableResult
     public nonisolated static func configure(identifiers: [String]) -> PurchasesManager {
         precondition(instance == nil, "PurchasesActor.configure(_:)" + " has already been called. Double configuration is not allowed.")
@@ -60,8 +58,14 @@ public actor PurchasesManager: PurchasesProtocol {
 
         return instance
     }
-
-    public func requestProducts(includingCache: Bool) async throws -> [StoreProduct] {
+    /// Fetches products from `StoreKit` (optionally returns cache first).
+    /// - See <doc:GettingStarted#fetch-products>
+    /// - Parameters:
+    ///   - includingCache: If `true`, cached products are returned immediately.
+    /// - Returns: Array of ``StoreProduct``.
+    /// - Throws: ``PurchasesError``
+    /// - Note: Uses `Product.products(for:)` under the hood.
+    public func requestProducts(includingCache: Bool = true) async throws -> [StoreProduct] {
         if includingCache {
             let cachedProducts = productsCache.values.map { $0 }
             if !cachedProducts.isEmpty {
@@ -76,7 +80,12 @@ public actor PurchasesManager: PurchasesProtocol {
 
         return productsCache.values.map { $0 }
     }
-
+    /// Performs a purchase flow for the given product ID.
+    /// - SeeAlso: <doc:GettingStarted#purchase>
+    /// - Throws: ``PurchasesError/purchaseCancelled``,
+    ///           ``PurchasesError/purchasePending``,
+    ///           ``PurchasesError/verificationFailed``
+    /// - Returns: Verified ``StoreProduct`` just bought.
     public func purchase(productID: String) async throws -> StoreProduct {
         guard let product = try await Product.products(for: [productID]).first else {
             throw PurchasesError.invalidProductID(productID)
@@ -98,7 +107,9 @@ public actor PurchasesManager: PurchasesProtocol {
             throw PurchasesError.unknown(PurchasesError.unknown(NSError(domain: "unknown", code: -1)))
         }
     }
-
+    /// Syncs with the App Store to restore previous purchases.
+    /// - Throws: ``PurchasesError``
+    /// - See <doc:PurchasesManager/restore()>
     public func restore() async throws {
         try await AppStore.sync()
     }
