@@ -38,6 +38,10 @@ jobs:
            --output-path docs \
            --hosting-base-path PurchaseKit
 
+      - name: Add index.html redirect
+        run: |
+          echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=documentation/rkpurchasekit/"></head><body></body></html>' > docs/index.html
+      
       - name: Commit and Push Docs to Main
         if: github.ref == 'refs/heads/main'
         run: |
