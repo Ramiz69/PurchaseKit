@@ -8,8 +8,18 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
-      - uses: actions/checkout@v3
-      - name: Build package
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Select Xcode 16.2
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '16.2'
+
+      - name: Print Swift version
+        run: swift --version
+
+      - name: Build
         run: swift build -v
