@@ -1,5 +1,8 @@
 # RKPurchaseKit
 
+[![Swift](https://img.shields.io/badge/swift-6.0-orange.svg)](https://swift.org)
+[![Platforms](https://img.shields.io/badge/platforms-iOS%20%7C%20macOS%20%7C%20watchOS%20%7C%20tvOS-blue)]()
+
 A lightweight Swift framework for in-app purchases using StoreKit 2  
 with full support for Swift Concurrency, async/await, and SPM.
 
