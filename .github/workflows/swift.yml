@@ -1,14 +1,15 @@
-name: Swift CI
+name: Swift CI & Docs
 
 on:
-  pull_request:
-    branches: [ main, development ]
   push:
+    branches: [ main, development ]
+  pull_request:
     branches: [ main, development ]
 
 jobs:
-  build-and-test:
+  build-and-docs:
     runs-on: macos-14
+
     steps:
       - name: Checkout
         uses: actions/checkout@v3
@@ -21,5 +22,26 @@ jobs:
       - name: Print Swift version
         run: swift --version
 
-      - name: Build
+      - name: Build Package
         run: swift build -v
+
+      - name: Generate DocC
+        run: |
+          mkdir -p docs
+          swift package \
+            --allow-writing-to-directory docs \
+            generate-documentation \
+            --target RKPurchaseKit \
+            --disable-indexing \
+            --transform-for-static-hosting \
+            --output-path docs \
+            --hosting-base-path PurchaseKit
+
+      - name: Commit and Push Docs to Main
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add docs
+          git commit -m "📚 Update documentation"
+          git push
