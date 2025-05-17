@@ -41,8 +41,8 @@ jobs:
       - name: Commit and Push Docs to Main
         if: github.ref == 'refs/heads/main'
         run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
-          git add docs
-          git commit -m "📚 Update documentation"
-          git push
+         git config user.name github-actions
+         git config user.email github-actions@github.com
+         git add docs
+         git commit -m "📚 Update documentation" --allow-empty
+         git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
