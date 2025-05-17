@@ -26,10 +26,8 @@ In Package.swift:
 
 ### 📚 Documentation
 
-Open in Xcode:
-```text
-Product > Build Documentation
-```
+- 🧭 [Online documentation →](https://ramiz69.github.io/PurchaseKit)
+- 🛠 In Xcode: `Product > Build Documentation`
 
 ### 📄 License
 
