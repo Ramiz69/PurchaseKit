@@ -19,6 +19,6 @@ public protocol PurchasesProtocol: Sendable {
 /// - SeeAlso: ``PurchasesProtocol/requestProducts(includingCache:)``
 public extension PurchasesProtocol {
     func requestProducts(includingCache: Bool = true) async throws -> [StoreProduct] {
-        []
+        try await requestProducts(includingCache: includingCache)
     }
 }

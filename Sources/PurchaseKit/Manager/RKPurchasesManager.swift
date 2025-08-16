@@ -49,7 +49,7 @@ public actor PurchasesManager: PurchasesProtocol {
     ///   - identifiers: Product IDs registered in App Store Connect.
     @discardableResult
     public nonisolated static func configure(identifiers: [String]) -> PurchasesManager {
-        precondition(instance == nil, "PurchasesActor.configure(_:)" + " has already been called. Double configuration is not allowed.")
+        precondition(instance == nil, "PurchasesActor.configure(_:) has already been called. Double configuration is not allowed.")
         let instance = PurchasesManager(identifiers: identifiers)
         self.instance = instance
         Task.detached {
