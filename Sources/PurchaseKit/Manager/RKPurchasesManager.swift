@@ -127,16 +127,7 @@ public actor PurchasesManager: PurchasesProtocol {
     }
 
     private func map(_ product: Product, _ isPurchased: Bool) -> StoreProduct {
-        StoreProduct(
-            productID: product.id,
-            type: ProductType(product.type),
-            displayName: product.displayName,
-            description: product.description,
-            price: product.price,
-            displayPrice: product.displayPrice,
-            isFamilyShareable: product.isFamilyShareable,
-            isPurchased: isPurchased
-        )
+        StoreProduct(product: product, isPurchased: isPurchased)
     }
 
     private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
