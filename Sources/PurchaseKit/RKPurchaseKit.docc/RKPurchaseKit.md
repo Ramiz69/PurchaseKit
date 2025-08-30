@@ -16,6 +16,17 @@
 
 ## Features
 
+- Actor-based, Swift Concurrency–first API
+- Product caching with instant repeat calls
+- Purchase & restore flows with typed errors
+- Live transaction listening via `AsyncStream`
+- **Entitlement helpers**:
+  - ``PurchasesManager/hasEntitlement(for:)``
+  - ``PurchasesManager/entitlementProductIDs()``
+  - ``PurchasesManager/activeSubscriptions()``
+  - ``PurchasesManager/activeSubscription(inGroup:)``
+- Simple value model: ``StoreProduct`` (with ``StoreProduct/subscriptionGroupID``)
+
 @Links(visualStyle: detailedGrid) {
     - <doc:GettingStarted>
     - <doc:PurchasesManager>
@@ -25,3 +36,14 @@
     - <doc:PurchasedProductEvent>
     - <doc:ProductType>
 }
+
+## Requirements
+
+- Swift 6, StoreKit 2
+- iOS 15.0 / macOS 12.0 / tvOS 15.0 / watchOS 8.0 / visionOS 1.0+
+
+## Notes
+
+- Entitlement state is derived from `Transaction.currentEntitlements` and reflected in ``StoreProduct/isPurchased``.
+- The manager refreshes entitlements after fetching products and after ``PurchasesManager/restore()``.
+- When you update UI from callbacks or streams, hop to `MainActor`.
