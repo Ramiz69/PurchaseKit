@@ -14,7 +14,9 @@ import RKPurchaseKit
 
 PurchasesManager.configure(identifiers: [
     "com.myapp.pro",
-    "com.myapp.consumable.coin"
+    "com.myapp.consumable.coin",
+    "com.myapp.sub.premium.monthly",
+    "com.myapp.sub.premium.yearly"
 ])
 ```
 
@@ -76,6 +78,63 @@ try await PurchasesManager.shared.restore()
 
 Provide an explicit “Restore Purchases” button if required by App Store Review.
 
+---
+## 6  Gate features by entitlement 
+
+Use current entitlements to unlock features (no receipt parsing needed):
+
+```swift
+let hasPro = await PurchasesManager.shared.hasEntitlement(for: "com.myapp.pro")
+
+if hasPro {
+    // unlock premium UI
+}
+```
+Or quickly check all entitled product identifiers:
+```swift
+let ids = await PurchasesManager.shared.entitlementProductIDs()
+```
+See: ``PurchasesManager/hasEntitlement(for:)``, ``PurchasesManager/entitlementProductIDs()``
+---
+## 7  Work with subscriptions (groups) 
+
+List all active auto-renewable subscriptions:
+```swift
+let active = await PurchasesManager.shared.activeSubscriptions()
+```
+Select the best (latest-expiring) subscription in a group:
+```swift
+if let subscription = await PurchasesManager.shared.activeSubscription(inGroup: "com.myapp.subscriptions.premium") {
+    print("Active plan:", subscription.displayName)
+}
+```
+
+Where to get groupID?
+It’s available on the product as
+StoreProduct/subscriptionGroupID (derived from Product.subscription.subscriptionGroupID) and configured in App Store Connect.
+
+See: ``PurchasesManager/activeSubscriptions()``, ``PurchasesManager/activeSubscription(inGroup:)``,
+``StoreProduct/subscriptionGroupID``.
+---
+## 8  Testing & mocking
+
+Depend on PurchasesProtocol in your app code and inject a mock in tests:
+```swift
+struct PurchasesMock: PurchasesProtocol {
+    func requestProducts(includingCache: Bool) async throws -> [StoreProduct] { [] }
+    func purchase(productID: String) async throws -> StoreProduct { throw PurchasesError.purchaseCancelled }
+    func restore() async throws { }
+    func hasEntitlement(for productID: String) async -> Bool { productID == "com.myapp.pro" }
+    func entitlementProductIDs() async -> Set<String> { ["com.myapp.pro"] }
+    func activeSubscriptions() async -> [StoreProduct] { [] }
+    func activeSubscription(inGroup groupID: String) async -> StoreProduct? { nil }
+}
+```
+---
+## 9  Concurrency notes
+
+PurchasesManager is an actor, so its API is thread-safe by design.
+Update UI on the main actor when reacting to events.
 ---
 ## Next steps
 
