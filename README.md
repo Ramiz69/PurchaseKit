@@ -1,6 +1,6 @@
 # RKPurchaseKit
 
-[![Swift](https://img.shields.io/badge/swift-6.0-orange.svg)](https://swift.org)
+[![Swift](https://img.shields.io/badge/swift-6.2-orange.svg)](https://swift.org)
 [![Platforms](https://img.shields.io/badge/platforms-iOS%20%7C%20macOS%20%7C%20watchOS%20%7C%20tvOS-blue)]()
 
 A lightweight Swift framework for in-app purchases using StoreKit 2  
@@ -17,7 +17,7 @@ https://github.com/Ramiz69/PurchaseKit.git
 ```
 In Package.swift:
 ```text
-.package(url: "https://github.com/Ramiz69/PurchaseKit.git", from: "1.0.3")
+.package(url: "https://github.com/Ramiz69/PurchaseKit.git", from: "1.0.4")
 ```
 
 ### ✅ Features
