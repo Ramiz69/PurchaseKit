@@ -34,7 +34,7 @@ public actor PurchasesManager: PurchasesProtocol {
     private var productsCache: [String: StoreProduct] = [:]
     private let continuation: AsyncStream<PurchasedProductEvent>.Continuation
     private var updateListenerTask: Task<Void, Never>?
-    private static var instance: PurchasesManager?
+    nonisolated(unsafe) private static var instance: PurchasesManager?
 
     // MARK: Initial methods
 
