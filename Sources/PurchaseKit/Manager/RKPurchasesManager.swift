@@ -88,7 +88,7 @@ public actor PurchasesManager: PurchasesProtocol {
         return productsCache.values.map { $0 }
     }
     /// Performs a purchase flow for the given product identifier.
-    public func purchase(productID: String) async throws -> StoreProduct {
+    public func purchase(productID: String) async throws -> (product: StoreProduct, transaction: Transaction) {
         guard let product = try await Product.products(for: [productID]).first else {
             throw PurchasesError.invalidProductID(productID)
         }
@@ -100,7 +100,7 @@ public actor PurchasesManager: PurchasesProtocol {
             cache(product)
             try await markPurchased(productID: product.id)
 
-            return productsCache[product.id]!
+            return (product: productsCache[product.id]!, transaction: transaction)
         case .userCancelled:
             throw PurchasesError.purchaseCancelled
         case .pending:

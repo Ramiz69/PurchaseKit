@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import StoreKit
 
 /// Protocol abstraction to allow mocking in tests.
 /// Full spec: <doc:PurchasesProtocol>
@@ -26,7 +27,7 @@ public protocol PurchasesProtocol: Sendable {
     /// - Returns: A verified ``StoreProduct`` that has just been purchased.
     /// - Throws: ``PurchasesError/purchaseCancelled``, ``PurchasesError/purchasePending``,
     ///           ``PurchasesError/verificationFailed``, or ``PurchasesError/invalidProductID(_:)``.
-    func purchase(productID: String) async throws -> StoreProduct
+    func purchase(productID: String) async throws -> (product: StoreProduct, transaction: Transaction)
     /// Synchronizes with the App Store and re-evaluates the current entitlements.
     ///
     /// You typically call this from a "Restore Purchases" button.
