@@ -7,6 +7,7 @@
 
 import Foundation
 import StoreKit
+import Synchronization
 
 /// ``PurchasesManager`` – entry point to `RKPurchaseKit`.
 ///
@@ -20,8 +21,8 @@ public actor PurchasesManager: PurchasesProtocol {
 
     /// Global singleton configured via ``configure(identifiers:)``.
     public nonisolated static var shared: PurchasesManager {
-        guard let instance else {
-            fatalError("❗️ PurchasesActor.configure(identifiers:) must be called before first use.")
+        guard let instance = storage.withLock({ $0 }) else {
+            fatalError("❗️ PurchasesManager.configure(identifiers:) must be called before first use.")
         }
 
         return instance
@@ -42,7 +43,14 @@ public actor PurchasesManager: PurchasesProtocol {
     private var productsCache: [String: StoreProduct] = [:]
     private let broadcaster = EventBroadcaster<PurchasedProductEvent>()
     private var updateListenerTask: Task<Void, Never>?
-    nonisolated(unsafe) private static var instance: PurchasesManager?
+    /// Backing store for ``shared``.
+    ///
+    /// `nonisolated(unsafe)` opted the singleton out of the compiler's checking without
+    /// putting anything in its place: `configure(identifiers:)` wrote this while other
+    /// threads read it through ``shared``, which ThreadSanitizer reports as a data race, and
+    /// racing reference-count traffic on an unsynchronised reference can leave a dangling
+    /// one. A mutex makes the access checked and lets configure's test-and-set be atomic.
+    private static let storage = Mutex<PurchasesManager?>(nil)
 
     // MARK: Initial methods
 
@@ -66,9 +74,19 @@ public actor PurchasesManager: PurchasesProtocol {
     /// - Returns: The configured singleton instance.
     @discardableResult
     public nonisolated static func configure(identifiers: [String]) -> PurchasesManager {
-        precondition(instance == nil, "PurchasesActor.configure(_:) has already been called. Double configuration is not allowed.")
-        let instance = PurchasesManager(identifiers: identifiers)
-        self.instance = instance
+        // Test and set under one lock. Checking `instance == nil` and assigning separately is
+        // a check-then-act on unsynchronised memory: two concurrent calls could both pass the
+        // check, and the precondition that is supposed to forbid that would not fire.
+        let instance = storage.withLock { stored -> PurchasesManager in
+            precondition(
+                stored == nil,
+                "PurchasesManager.configure(_:) has already been called. Double configuration is not allowed."
+            )
+            let instance = PurchasesManager(identifiers: identifiers)
+            stored = instance
+
+            return instance
+        }
         Task.detached {
             await instance.startListener()
         }
