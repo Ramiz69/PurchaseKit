@@ -29,10 +29,18 @@ public actor PurchasesManager: PurchasesProtocol {
     /// Async stream of purchase events emitted when a product becomes entitled.
     ///
     /// You can `for await` this stream to reactively update UI or unlock features.
-    public nonisolated let purchasedProducts: AsyncStream<PurchasedProductEvent>
+    ///
+    /// Every access returns a fresh stream that receives every event, so several observers
+    /// can watch at once. Reading this once and iterating the result twice does not: a
+    /// single `AsyncStream` splits its events between iterators. Events are not replayed,
+    /// so read the current state with ``hasEntitlement(for:)`` or ``requestProducts(includingCache:)``
+    /// when a subscriber starts.
+    public nonisolated var purchasedProducts: AsyncStream<PurchasedProductEvent> {
+        broadcaster.makeStream()
+    }
     private let identifiers: [String]
     private var productsCache: [String: StoreProduct] = [:]
-    private let continuation: AsyncStream<PurchasedProductEvent>.Continuation
+    private let broadcaster = EventBroadcaster<PurchasedProductEvent>()
     private var updateListenerTask: Task<Void, Never>?
     nonisolated(unsafe) private static var instance: PurchasesManager?
 
@@ -43,14 +51,11 @@ public actor PurchasesManager: PurchasesProtocol {
         // returns, and a duplicated identifier would surface the same product twice.
         var seen: Set<String> = []
         self.identifiers = identifiers.filter { seen.insert($0).inserted }
-        let pair = AsyncStream.makeStream(of: PurchasedProductEvent.self)
-        self.purchasedProducts = pair.stream
-        self.continuation = pair.continuation
     }
 
     deinit {
         updateListenerTask?.cancel()
-        continuation.finish()
+        broadcaster.finish()
     }
 
     // MARK: Public methods
@@ -222,10 +227,20 @@ public actor PurchasesManager: PurchasesProtocol {
         identifiers.compactMap { productsCache[$0] }
     }
 
-    private func startListener() async {
+    private func startListener() {
         guard updateListenerTask == nil else { return }
 
-        updateListenerTask = Task { await listenForTransactions() }
+        // `self` is captured weakly and re-acquired per update. Wrapping an isolated call
+        // in a plain `Task { ... }` captures it strongly instead, and because
+        // `Transaction.updates` never ends, that kept the actor alive forever: `deinit` was
+        // unreachable, so the cancel and finish it performs could never run.
+        updateListenerTask = Task { [weak self] in
+            for await result in Transaction.updates {
+                guard let self else { return }
+
+                await self.handle(result)
+            }
+        }
     }
 
     private func cache(_ product: Product, purchased: Bool = false) {
@@ -250,25 +265,23 @@ public actor PurchasesManager: PurchasesProtocol {
 
         let updated = cached.setPurchasingFlag(true)
         productsCache[productID] = updated
-        continuation.yield(PurchasedProductEvent(product: updated))
+        broadcaster.yield(PurchasedProductEvent(product: updated))
     }
 
     private func updateCustomerProductStatus() async {
         await refreshEntitlements()
     }
-    /// Listens to live transaction updates and finishes them.
-    private func listenForTransactions() async {
-        for await result in Transaction.updates {
-            guard let transaction = try? checkVerified(result) else { continue }
+    /// Finishes one live transaction update and rebuilds entitlement state.
+    private func handle(_ result: VerificationResult<Transaction>) async {
+        guard let transaction = try? checkVerified(result) else { return }
 
-            await transaction.finish()
-            // `Transaction.updates` also delivers revocations: refunds, a family-sharing grant
-            // being withdrawn, an entitlement expiring. `markPurchased` could only ever set the
-            // flag to `true`, so a refund arrived here as a purchase — and emitted a
-            // `PurchasedProductEvent` for it. Rebuilding from `currentEntitlements` moves the
-            // flag in both directions.
-            await refreshEntitlements()
-        }
+        await transaction.finish()
+        // `Transaction.updates` also delivers revocations: refunds, a family-sharing grant
+        // being withdrawn, an entitlement expiring. `markPurchased` could only ever set the
+        // flag to `true`, so a refund arrived here as a purchase — and emitted a
+        // `PurchasedProductEvent` for it. Rebuilding from `currentEntitlements` moves the
+        // flag in both directions.
+        await refreshEntitlements()
     }
     /// Rebuilds the entitlement state from `Transaction.currentEntitlements`.
     ///
@@ -302,7 +315,7 @@ public actor PurchasesManager: PurchasesProtocol {
             let updated = storeProduct.setPurchasingFlag(isEntitled)
             productsCache[productID] = updated
             if isEntitled {
-                continuation.yield(PurchasedProductEvent(product: updated))
+                broadcaster.yield(PurchasedProductEvent(product: updated))
             }
         }
     }
