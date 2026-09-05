@@ -1,0 +1,47 @@
+{
+  "": {
+    "swift-dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/primary.swiftdeps"
+  },
+  "/Users/ramizkichibekov/Work/Projects/PurchaseKit/Sources/PurchaseKit/Manager/RKPurchasesManager.swift": {
+    "dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesManager.d",
+    "object": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesManager.swift.o",
+    "swiftmodule": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesManager~partial.swiftmodule",
+    "swift-dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesManager.swiftdeps",
+    "diagnostics": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesManager.dia"
+  },
+  "/Users/ramizkichibekov/Work/Projects/PurchaseKit/Sources/PurchaseKit/Models/RKProductType.swift": {
+    "dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKProductType.d",
+    "object": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKProductType.swift.o",
+    "swiftmodule": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKProductType~partial.swiftmodule",
+    "swift-dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKProductType.swiftdeps",
+    "diagnostics": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKProductType.dia"
+  },
+  "/Users/ramizkichibekov/Work/Projects/PurchaseKit/Sources/PurchaseKit/Models/RKPurchasedProductEvent.swift": {
+    "dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasedProductEvent.d",
+    "object": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasedProductEvent.swift.o",
+    "swiftmodule": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasedProductEvent~partial.swiftmodule",
+    "swift-dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasedProductEvent.swiftdeps",
+    "diagnostics": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasedProductEvent.dia"
+  },
+  "/Users/ramizkichibekov/Work/Projects/PurchaseKit/Sources/PurchaseKit/Models/RKPurchasesError.swift": {
+    "dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesError.d",
+    "object": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesError.swift.o",
+    "swiftmodule": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesError~partial.swiftmodule",
+    "swift-dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesError.swiftdeps",
+    "diagnostics": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesError.dia"
+  },
+  "/Users/ramizkichibekov/Work/Projects/PurchaseKit/Sources/PurchaseKit/Models/RKStoreProduct.swift": {
+    "dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKStoreProduct.d",
+    "object": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKStoreProduct.swift.o",
+    "swiftmodule": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKStoreProduct~partial.swiftmodule",
+    "swift-dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKStoreProduct.swiftdeps",
+    "diagnostics": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKStoreProduct.dia"
+  },
+  "/Users/ramizkichibekov/Work/Projects/PurchaseKit/Sources/PurchaseKit/Protocols/RKPurchasesProtocol.swift": {
+    "dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesProtocol.d",
+    "object": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesProtocol.swift.o",
+    "swiftmodule": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesProtocol~partial.swiftmodule",
+    "swift-dependencies": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesProtocol.swiftdeps",
+    "diagnostics": "/Users/ramizkichibekov/Work/Projects/PurchaseKit/.build/arm64-apple-macosx/debug/RKPurchaseKit.build/RKPurchasesProtocol.dia"
+  }
+}

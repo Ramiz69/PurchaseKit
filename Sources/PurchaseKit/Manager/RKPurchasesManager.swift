@@ -106,7 +106,7 @@ public actor PurchasesManager: PurchasesProtocol {
         case .pending:
             throw PurchasesError.purchasePending
         default:
-            throw PurchasesError.unknown(PurchasesError.unknown(NSError(domain: "unknown", code: -1)))
+            throw PurchasesError.unknown(NSError(domain: "unknown", code: -1))
         }
     }
     /// Syncs with the App Store and refreshes current entitlements.
@@ -116,27 +116,39 @@ public actor PurchasesManager: PurchasesProtocol {
     }
     /// Returns `true` if the user currently has an active entitlement for `productID`.
     ///
-    /// Uses `Transaction.currentEntitlements` under the hood and falls back to the cache
-    /// if available for fast checks.
+    /// A cached `true` is taken at face value as a fast path. Anything else is resolved
+    /// against `Transaction.currentEntitlements`, because a cached `false` only means the
+    /// entitlement has not been observed yet.
     public func hasEntitlement(for productID: String) async -> Bool {
-        if let cached = productsCache[productID] {
-            return cached.isPurchased
+        // The cache is authoritative only when it says yes. A cached `false` may simply mean
+        // the entitlement has not been read yet — a purchase made on another device, or a cold
+        // start before the first refresh — so that case has to reach StoreKit. Returning the
+        // cached `false` directly made those users look unentitled.
+        if productsCache[productID]?.isPurchased == true {
+            return true
         }
+
         for await result in Transaction.currentEntitlements {
-            if let transaction = try? checkVerified(result), transaction.productID == productID {
+            guard let transaction = try? checkVerified(result) else { continue }
+
+            if transaction.productID == productID, transaction.revocationDate == nil {
                 return true
             }
         }
+
         return false
     }
     /// Returns the set of product identifiers for which the user has an active entitlement.
     public func entitlementProductIDs() async -> Set<String> {
         var ids: Set<String> = []
         for await result in Transaction.currentEntitlements {
-            if let transaction = try? checkVerified(result) {
-                ids.insert(transaction.productID)
-            }
+            guard let transaction = try? checkVerified(result),
+                  transaction.revocationDate == nil
+            else { continue }
+
+            ids.insert(transaction.productID)
         }
+
         return ids
     }
     /// Returns all active **auto-renewable** subscriptions mapped to ``StoreProduct``.
@@ -214,7 +226,9 @@ public actor PurchasesManager: PurchasesProtocol {
     }
     /// Marks the given product as purchased and emits a ``PurchasedProductEvent``.
     private func markPurchased(productID: String) async throws {
-        guard let cached = productsCache[productID] else { return }
+        // Only on a false -> true transition: `purchasedProducts` is documented as firing when
+        // a product *becomes* entitled, and this now runs on every transaction update.
+        guard let cached = productsCache[productID], !cached.isPurchased else { return }
 
         let updated = cached.setPurchasingFlag(true)
         productsCache[productID] = updated
@@ -229,31 +243,49 @@ public actor PurchasesManager: PurchasesProtocol {
         for await result in Transaction.updates {
             guard let transaction = try? checkVerified(result) else { continue }
 
-            try? await markPurchased(productID: transaction.productID)
             await transaction.finish()
+            // `Transaction.updates` also delivers revocations: refunds, a family-sharing grant
+            // being withdrawn, an entitlement expiring. `markPurchased` could only ever set the
+            // flag to `true`, so a refund arrived here as a purchase — and emitted a
+            // `PurchasedProductEvent` for it. Rebuilding from `currentEntitlements` moves the
+            // flag in both directions.
+            await refreshEntitlements()
         }
     }
-    /// Rebuilds the entitlement state:
-    /// 1) Clears `isPurchased` on all cached products.
-    /// 2) Sets it to `true` for anything present in `Transaction.currentEntitlements`.
+    /// Rebuilds the entitlement state from `Transaction.currentEntitlements`.
+    ///
+    /// Collects the entitled identifiers, caching any product not seen before, then applies
+    /// the difference against the cache. Flags move in both directions, and
+    /// ``purchasedProducts`` only emits for a product that has actually become entitled.
     private func refreshEntitlements() async {
-        // 1) Clear all flags
-        if !productsCache.isEmpty {
-            for (index, storeProduct) in productsCache where storeProduct.isPurchased {
-                productsCache[index] = storeProduct.setPurchasingFlag(false)
+        var entitled: Set<String> = []
+        for await result in Transaction.currentEntitlements {
+            guard let transaction = try? checkVerified(result),
+                  transaction.revocationDate == nil
+            else { continue }
+
+            entitled.insert(transaction.productID)
+            if productsCache[transaction.productID] == nil,
+               let fetched = try? await Product.products(for: [transaction.productID]).first {
+                cache(fetched)
             }
         }
-        // 2) Apply current entitlements
-        for await result in Transaction.currentEntitlements {
-            guard let transaction = try? checkVerified(result) else { continue }
 
-            if productsCache[transaction.productID] == nil {
-                if let fetched = try? await Product.products(for: [transaction.productID]).first {
-                    cache(fetched, purchased: true)
-                    continue
-                }
+        // Apply the difference rather than clearing every flag and setting it again. The
+        // clear-then-reapply pass left every entitled product looking newly purchased on each
+        // refresh, so the event stream repeated itself for products the subscriber already
+        // knew about — and it never cleared a flag that had genuinely gone away.
+        for productID in productsCache.keys.sorted() {
+            guard let storeProduct = productsCache[productID] else { continue }
+
+            let isEntitled = entitled.contains(productID)
+            guard storeProduct.isPurchased != isEntitled else { continue }
+
+            let updated = storeProduct.setPurchasingFlag(isEntitled)
+            productsCache[productID] = updated
+            if isEntitled {
+                continuation.yield(PurchasedProductEvent(product: updated))
             }
-            try? await markPurchased(productID: transaction.productID)
         }
     }
     /// Ensures a ``StoreProduct`` for `productID`, fetching it if needed.
