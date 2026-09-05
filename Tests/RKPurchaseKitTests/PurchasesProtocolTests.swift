@@ -5,6 +5,7 @@
 //  Created by Ramiz Kichibekov on 11.05.2025.
 //
 
+import Foundation
 import Synchronization
 import Testing
 import StoreKit
@@ -29,8 +30,19 @@ struct PurchasesProtocolTests {
             return catalogue
         }
 
-        func purchase(productID: String) async throws -> (product: StoreProduct, transaction: Transaction) {
-            throw PurchasesError.invalidProductID(productID)
+        func purchase(productID: String) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
+            guard let product = catalogue.first(where: { $0.productID == productID }) else {
+                throw PurchasesError.invalidProductID(productID)
+            }
+
+            return (
+                product: product,
+                transaction: StoreTransaction(
+                    id: 1,
+                    productID: productID,
+                    purchaseDate: Date(timeIntervalSince1970: 1_000_000)
+                )
+            )
         }
 
         func restore() async throws {}
@@ -114,6 +126,40 @@ struct PurchasesProtocolTests {
         #expect(await spy.entitlementProductIDs() == ["pro.monthly"])
         #expect(await spy.activeSubscriptions().map(\.productID) == ["pro.monthly"])
         #expect(await spy.activeSubscription(inGroup: "group.pro")?.productID == "pro.monthly")
+    }
+
+    /// The last thing that kept `PurchasesProtocol` from being fully mockable.
+    ///
+    /// `purchase(productID:)` used to return a `StoreKit.Transaction`, which has no public
+    /// initializer, so a stand-in could only ever throw from it — the successful path was
+    /// impossible to represent, and therefore impossible to test against.
+    @Test("a stand-in can return a successful purchase")
+    func mockCanReturnSuccessfulPurchase() async throws {
+        let product = StoreProduct(
+            productID: "pro.monthly",
+            type: .autoRenewable,
+            displayName: "Pro Monthly",
+            description: "Everything, billed monthly",
+            price: 4.99,
+            displayPrice: "$4.99"
+        )
+        let spy = SpyPurchases(catalogue: [product])
+
+        let result = try await spy.purchase(productID: "pro.monthly")
+
+        #expect(result.product.productID == "pro.monthly")
+        #expect(result.transaction.productID == "pro.monthly")
+        #expect(result.transaction.id == 1)
+        #expect(result.transaction.transaction == nil)
+    }
+
+    @Test("a stand-in still reports an unknown identifier")
+    func mockRejectsUnknownProduct() async {
+        let spy = SpyPurchases()
+
+        await #expect(throws: PurchasesError.invalidProductID("nope")) {
+            try await spy.purchase(productID: "nope")
+        }
     }
 
     // MARK: Helpers
