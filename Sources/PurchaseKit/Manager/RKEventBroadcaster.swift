@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Synchronization
 
 /// Delivers every event to every active subscriber.
 ///
@@ -15,10 +16,16 @@ import Foundation
 /// as soon as a second observer appears. Instead each subscriber gets its own stream, and
 /// this type keeps the live continuations so a single yield reaches all of them.
 ///
-/// The class is `@unchecked Sendable` because every mutable member is guarded by `lock`.
-/// `NSLock` rather than `Mutex` or `OSAllocatedUnfairLock` so the deployment targets stay
-/// at iOS 15 / macOS 12.
-final class EventBroadcaster<Event: Sendable>: @unchecked Sendable {
+/// State lives behind a `Mutex`, which makes the type checked-`Sendable`: the compiler
+/// verifies the isolation rather than taking an `@unchecked` assertion on trust.
+final class EventBroadcaster<Event: Sendable>: Sendable {
+
+    // MARK: Nested types
+
+    private struct State {
+        var continuations: [UUID: AsyncStream<Event>.Continuation] = [:]
+        var isFinished = false
+    }
 
     // MARK: Properties
 
@@ -28,11 +35,9 @@ final class EventBroadcaster<Event: Sendable>: @unchecked Sendable {
     /// for the whole lifetime of the process when nobody drains it. Events describe
     /// entitlement changes, so when a slow subscriber overflows, the newest ones are the
     /// ones worth keeping.
-    private static var bufferSize: Int { 32 }
+    static var bufferSize: Int { 32 }
 
-    private let lock = NSLock()
-    private var continuations: [UUID: AsyncStream<Event>.Continuation] = [:]
-    private var isFinished = false
+    private let state = Mutex(State())
 
     // MARK: Internal methods
 
@@ -47,12 +52,13 @@ final class EventBroadcaster<Event: Sendable>: @unchecked Sendable {
             bufferingPolicy: .bufferingNewest(Self.bufferSize)
         )
 
-        lock.lock()
-        let hasFinished = isFinished
-        if !hasFinished {
-            continuations[id] = continuation
+        let hasFinished = state.withLock { state -> Bool in
+            guard !state.isFinished else { return true }
+
+            state.continuations[id] = continuation
+
+            return false
         }
-        lock.unlock()
 
         guard !hasFinished else {
             continuation.finish()
@@ -72,34 +78,35 @@ final class EventBroadcaster<Event: Sendable>: @unchecked Sendable {
     }
     /// Sends one event to every active subscriber.
     func yield(_ event: Event) {
-        lock.lock()
-        let targets = Array(continuations.values)
-        lock.unlock()
-
-        // Yield outside the lock: delivery can terminate a stream, and the resulting
-        // `onTermination` calls back into `remove(_:)` for the same lock.
+        // Read the targets under the lock, then deliver outside it: delivery can terminate a
+        // stream, and the resulting `onTermination` calls back into `remove(_:)`, which takes
+        // the same lock.
+        let targets = state.withLock { Array($0.continuations.values) }
         for continuation in targets {
             continuation.yield(event)
         }
     }
     /// Ends every active stream and refuses new ones.
     func finish() {
-        lock.lock()
-        isFinished = true
-        let targets = Array(continuations.values)
-        continuations.removeAll()
-        lock.unlock()
+        let targets = state.withLock { state -> [AsyncStream<Event>.Continuation] in
+            state.isFinished = true
+            let continuations = Array(state.continuations.values)
+            state.continuations.removeAll()
 
+            return continuations
+        }
         for continuation in targets {
             continuation.finish()
         }
+    }
+    /// Number of registered subscribers. Exists so tests can observe cleanup.
+    var subscriberCount: Int {
+        state.withLock { $0.continuations.count }
     }
 
     // MARK: Private methods
 
     private func remove(_ id: UUID) {
-        lock.lock()
-        continuations[id] = nil
-        lock.unlock()
+        state.withLock { _ = $0.continuations.removeValue(forKey: id) }
     }
 }

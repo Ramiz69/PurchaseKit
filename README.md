@@ -1,7 +1,7 @@
 # RKPurchaseKit
 
 [![Swift](https://img.shields.io/badge/swift-6.2-orange.svg)](https://swift.org)
-[![Platforms](https://img.shields.io/badge/platforms-iOS%20%7C%20macOS%20%7C%20watchOS%20%7C%20tvOS-blue)]()
+[![Platforms](https://img.shields.io/badge/platforms-iOS%2026%20%7C%20macOS%2026%20%7C%20watchOS%2026%20%7C%20tvOS%2026%20%7C%20visionOS%2026-blue)]()
 
 A lightweight Swift framework for in-app purchases using StoreKit 2  
 with full support for Swift Concurrency, async/await, and SPM.
@@ -25,7 +25,7 @@ In Package.swift:
 - actor-based PurchasesManager
 - DocC documentation
 - Static linking support (type: .static)
-- Support for iOS, macOS, tvOS, watchOS, visionOS
+- Support for iOS, macOS, tvOS, watchOS, visionOS (26 and later)
 
 ### 📚 Documentation
 
