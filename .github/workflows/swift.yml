@@ -21,8 +21,19 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Print Swift version
-        run: swift --version
+      - name: Check the toolchain is new enough
+        run: |
+          # The package deploys to the OS 26 platforms and needs that SDK to build at all.
+          # Without this check a too-old image fails later, inside compilation, with errors
+          # that do not name the real cause.
+          required=26
+          major=$(xcodebuild -version | head -1 | sed -E 's/Xcode ([0-9]+).*/\1/')
+          if [ "$major" -lt "$required" ]; then
+            echo "::error::Xcode $major is too old. This package needs Xcode $required or newer for the OS 26 SDK. Pin a runner image that provides it, or lower the platforms in Package.swift."
+            exit 1
+          fi
+          xcodebuild -version
+          swift --version
 
       - name: Build Package
         run: swift build -v
