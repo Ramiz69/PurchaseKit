@@ -6,12 +6,12 @@ import PackageDescription
 let package = Package(
     name: "PurchaseKit",
     platforms: [
-        .iOS(.v15),
-        .watchOS(.v8),
-        .tvOS(.v15),
-        .macOS(.v12),
-        .macCatalyst(.v15),
-        .visionOS(.v1)
+        .iOS(.v26),
+        .watchOS(.v26),
+        .tvOS(.v26),
+        .macOS(.v26),
+        .macCatalyst(.v26),
+        .visionOS(.v26)
     ],
     products: [
         .library(
@@ -27,6 +27,11 @@ let package = Package(
             swiftSettings: [
                 .define("SWIFT_PACKAGE")
             ]
+        ),
+        .testTarget(
+            name: "RKPurchaseKitTests",
+            dependencies: ["RKPurchaseKit"],
+            path: "Tests/RKPurchaseKitTests"
         )
     ]
 )
