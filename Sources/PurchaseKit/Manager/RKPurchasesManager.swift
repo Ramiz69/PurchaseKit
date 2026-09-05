@@ -39,7 +39,10 @@ public actor PurchasesManager: PurchasesProtocol {
     // MARK: Initial methods
 
     private init(identifiers: [String]) {
-        self.identifiers = identifiers
+        // Keep the caller's order but drop repeats: the order is what `requestProducts`
+        // returns, and a duplicated identifier would surface the same product twice.
+        var seen: Set<String> = []
+        self.identifiers = identifiers.filter { seen.insert($0).inserted }
         let pair = AsyncStream.makeStream(of: PurchasedProductEvent.self)
         self.purchasedProducts = pair.stream
         self.continuation = pair.continuation
@@ -73,7 +76,7 @@ public actor PurchasesManager: PurchasesProtocol {
     /// `isPurchased` flag remains accurate.
     public func requestProducts(includingCache: Bool = true) async throws -> [StoreProduct] {
         if includingCache {
-            let cachedProducts = productsCache.values.map { $0 }
+            let cachedProducts = configuredProducts
             if !cachedProducts.isEmpty {
                 Task { await self.refreshEntitlements() }
                 return cachedProducts
@@ -85,7 +88,7 @@ public actor PurchasesManager: PurchasesProtocol {
         }
         await updateCustomerProductStatus()
 
-        return productsCache.values.map { $0 }
+        return configuredProducts
     }
     /// Performs a purchase flow for the given product identifier.
     public func purchase(productID: String) async throws -> (product: StoreProduct, transaction: Transaction) {
@@ -160,7 +163,9 @@ public actor PurchasesManager: PurchasesProtocol {
         }
         var result: [StoreProduct] = []
         for await resultTransaction in Transaction.currentEntitlements {
-            guard let transaction = try? checkVerified(resultTransaction) else { continue }
+            guard let transaction = try? checkVerified(resultTransaction),
+                  transaction.revocationDate == nil
+            else { continue }
 
             if let product = productsCache[transaction.productID], product.type == .autoRenewable {
                 result.append(product)
@@ -186,13 +191,16 @@ public actor PurchasesManager: PurchasesProtocol {
             _ = try? await requestProducts(includingCache: true)
         }
         for await resultTransaction in Transaction.currentEntitlements {
-            guard let transaction = try? checkVerified(resultTransaction) else { continue }
-            // Проверяем, что это подписка в нужной группе
+            guard let transaction = try? checkVerified(resultTransaction),
+                  transaction.revocationDate == nil
+            else { continue }
+
+            // Keep only auto-renewable subscriptions belonging to the requested group.
             if let product = try? await storeProduct(for: transaction.productID),
                product.type == .autoRenewable,
                product.subscriptionGroupID == groupID
             {
-                // У auto-renewable подписок у транзакции обычно есть expirationDate
+                // Auto-renewable transactions normally carry an expiration date.
                 let expiration = transaction.expirationDate
                 if best == nil || compare(expiration, isLaterThan: best?.expires) {
                     best = (product, expiration)
@@ -203,6 +211,16 @@ public actor PurchasesManager: PurchasesProtocol {
     }
 
     // MARK: Private methods
+
+    /// Cached products for the configured identifiers, in the order passed to
+    /// ``configure(identifiers:)``.
+    ///
+    /// `productsCache` is keyed by identifier, so iterating it yields a different order on
+    /// every run and shuffles the paywall. It also holds products cached opportunistically
+    /// from entitlements, which were never part of `identifiers` and must not be returned.
+    private var configuredProducts: [StoreProduct] {
+        identifiers.compactMap { productsCache[$0] }
+    }
 
     private func startListener() async {
         guard updateListenerTask == nil else { return }

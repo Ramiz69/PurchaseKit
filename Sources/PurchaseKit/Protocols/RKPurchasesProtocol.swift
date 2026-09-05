@@ -57,7 +57,12 @@ public protocol PurchasesProtocol: Sendable {
 /// Default wrapper that keeps source compatibility.
 /// - SeeAlso: ``PurchasesProtocol/requestProducts(includingCache:)``
 public extension PurchasesProtocol {
-    func requestProducts(includingCache: Bool = true) async throws -> [StoreProduct] {
-        try await requestProducts(includingCache: includingCache)
+    /// Calls ``PurchasesProtocol/requestProducts(includingCache:)`` with caching enabled.
+    ///
+    /// Takes no parameters on purpose. An overload that repeats the requirement's signature
+    /// and only adds a default value becomes the witness for any conformer that does not
+    /// implement the requirement itself, and then calls itself forever.
+    func requestProducts() async throws -> [StoreProduct] {
+        try await requestProducts(includingCache: true)
     }
 }
