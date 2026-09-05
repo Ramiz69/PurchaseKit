@@ -27,6 +27,20 @@ public actor PurchasesManager: PurchasesProtocol {
 
         return instance
     }
+    /// The configured singleton, without trapping when there is none.
+    ///
+    /// ``shared`` is the convenient form and treats a missing configuration as a programmer
+    /// error. Use this where the caller can react instead — a plug-in surface, or a path
+    /// that may run before ``configure(identifiers:)``.
+    ///
+    /// - Throws: ``PurchasesError/notConfigured``.
+    public nonisolated static func resolved() throws -> PurchasesManager {
+        guard let instance = storage.withLock({ $0 }) else {
+            throw PurchasesError.notConfigured
+        }
+
+        return instance
+    }
     /// Async stream of purchase events emitted when a product becomes entitled.
     ///
     /// You can `for await` this stream to reactively update UI or unlock features.
@@ -115,24 +129,32 @@ public actor PurchasesManager: PurchasesProtocol {
     }
     /// Performs a purchase flow for the given product identifier.
     public func purchase(productID: String) async throws -> (product: StoreProduct, transaction: Transaction) {
-        guard let product = try await Product.products(for: [productID]).first else {
-            throw PurchasesError.invalidProductID(productID)
-        }
+        let product = try await storeKitProduct(for: productID)
 
         switch try await product.purchase() {
         case .success(let result):
             let transaction = try checkVerified(result)
             await transaction.finish()
-            cache(product)
-            try await markPurchased(productID: product.id)
+            // Read the flag *after* the suspension above. The transaction listener may have
+            // rebuilt entitlements while this was suspended and already emitted for this
+            // product; re-reading here keeps a purchase to one event. Caching straight to
+            // `true` also avoids the old reset-to-`false`-then-set-`true` pass, which made
+            // the product look briefly unentitled.
+            let wasEntitled = productsCache[product.id]?.isPurchased ?? false
+            let purchased = cache(product, purchased: true)
+            if !wasEntitled {
+                broadcaster.yield(PurchasedProductEvent(product: purchased))
+            }
 
-            return (product: productsCache[product.id]!, transaction: transaction)
+            return (product: purchased, transaction: transaction)
         case .userCancelled:
             throw PurchasesError.purchaseCancelled
         case .pending:
             throw PurchasesError.purchasePending
         default:
-            throw PurchasesError.unknown(NSError(domain: "unknown", code: -1))
+            // `Product.PurchaseResult` is non-frozen, so a StoreKit release can add a case
+            // this SDK predates.
+            throw PurchasesError.unhandledPurchaseResult
         }
     }
     /// Syncs with the App Store and refreshes current entitlements.
@@ -261,8 +283,12 @@ public actor PurchasesManager: PurchasesProtocol {
         }
     }
 
-    private func cache(_ product: Product, purchased: Bool = false) {
-        productsCache[product.id] = map(product, purchased)
+    @discardableResult
+    private func cache(_ product: Product, purchased: Bool = false) -> StoreProduct {
+        let stored = map(product, purchased)
+        productsCache[product.id] = stored
+
+        return stored
     }
 
     private func map(_ product: Product, _ isPurchased: Bool) -> StoreProduct {
@@ -275,17 +301,6 @@ public actor PurchasesManager: PurchasesProtocol {
         case .unverified: throw PurchasesError.verificationFailed
         }
     }
-    /// Marks the given product as purchased and emits a ``PurchasedProductEvent``.
-    private func markPurchased(productID: String) async throws {
-        // Only on a false -> true transition: `purchasedProducts` is documented as firing when
-        // a product *becomes* entitled, and this now runs on every transaction update.
-        guard let cached = productsCache[productID], !cached.isPurchased else { return }
-
-        let updated = cached.setPurchasingFlag(true)
-        productsCache[productID] = updated
-        broadcaster.yield(PurchasedProductEvent(product: updated))
-    }
-
     private func updateCustomerProductStatus() async {
         await refreshEntitlements()
     }
@@ -295,8 +310,8 @@ public actor PurchasesManager: PurchasesProtocol {
 
         await transaction.finish()
         // `Transaction.updates` also delivers revocations: refunds, a family-sharing grant
-        // being withdrawn, an entitlement expiring. `markPurchased` could only ever set the
-        // flag to `true`, so a refund arrived here as a purchase — and emitted a
+        // being withdrawn, an entitlement expiring. Marking the product purchased could only
+        // ever set the flag to `true`, so a refund arrived here as a purchase — and emitted a
         // `PurchasedProductEvent` for it. Rebuilding from `currentEntitlements` moves the
         // flag in both directions.
         await refreshEntitlements()
@@ -342,13 +357,27 @@ public actor PurchasesManager: PurchasesProtocol {
         if let cached = productsCache[productID] {
             return cached
         }
+
+        return cache(try await fetchProduct(for: productID))
+    }
+    /// Returns the StoreKit product for `productID`, reusing the cached one when there is one.
+    ///
+    /// Purchasing used to re-fetch unconditionally, spending a network round trip on a
+    /// product the cache was already holding.
+    private func storeKitProduct(for productID: String) async throws -> Product {
+        if let cached = productsCache[productID], let product = cached.product {
+            return product
+        }
+
+        return try await fetchProduct(for: productID)
+    }
+
+    private func fetchProduct(for productID: String) async throws -> Product {
         guard let fetched = try await Product.products(for: [productID]).first else {
             throw PurchasesError.invalidProductID(productID)
         }
 
-        cache(fetched)
-
-        return productsCache[productID]!
+        return fetched
     }
 
     private func compare(_ lhs: Date?, isLaterThan rhs: Date?) -> Bool {

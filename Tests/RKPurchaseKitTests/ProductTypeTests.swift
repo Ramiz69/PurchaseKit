@@ -27,12 +27,13 @@ struct ProductTypeTests {
     }
 
     /// `Product.ProductType` is a non-frozen raw-value type, so a future StoreKit release can
-    /// introduce a case this SDK has never seen. It currently lands on `.nonConsumable`,
-    /// which is silent: this test pins that behaviour so a change to it is deliberate.
-    @Test("an unknown StoreKit type falls back to nonConsumable")
-    func mapsUnknownTypeToNonConsumable() {
-        let unknown = Product.ProductType(rawValue: "future-store-kit-type")
+    /// introduce a kind this SDK has never seen. It used to land on `.nonConsumable`, which
+    /// reads as a permanent one-off purchase and hid the fact that the SDK was guessing.
+    @Test("an unknown StoreKit type maps to unknown, not to a real kind")
+    func mapsUnknownTypeToUnknown() {
+        let future = Product.ProductType(rawValue: "future-store-kit-type")
 
-        #expect(ProductType(unknown) == .nonConsumable)
+        #expect(ProductType(future) == .unknown)
+        #expect(ProductType(future) != .nonConsumable)
     }
 }
