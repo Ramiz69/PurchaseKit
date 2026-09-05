@@ -128,7 +128,7 @@ public actor PurchasesManager: PurchasesProtocol {
         return configuredProducts
     }
     /// Performs a purchase flow for the given product identifier.
-    public func purchase(productID: String) async throws -> (product: StoreProduct, transaction: Transaction) {
+    public func purchase(productID: String) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
         let product = try await storeKitProduct(for: productID)
 
         switch try await product.purchase() {
@@ -146,7 +146,7 @@ public actor PurchasesManager: PurchasesProtocol {
                 broadcaster.yield(PurchasedProductEvent(product: purchased))
             }
 
-            return (product: purchased, transaction: transaction)
+            return (product: purchased, transaction: StoreTransaction(transaction: transaction))
         case .userCancelled:
             throw PurchasesError.purchaseCancelled
         case .pending:

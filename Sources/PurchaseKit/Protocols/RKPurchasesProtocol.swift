@@ -24,10 +24,11 @@ public protocol PurchasesProtocol: Sendable {
     /// Starts a purchase flow for the given product.
     ///
     /// - Parameter productID: A product identifier registered in App Store Connect.
-    /// - Returns: A verified ``StoreProduct`` that has just been purchased.
+    /// - Returns: The verified ``StoreProduct`` that has just been purchased, and the
+    ///   ``StoreTransaction`` describing the purchase.
     /// - Throws: ``PurchasesError/purchaseCancelled``, ``PurchasesError/purchasePending``,
     ///           ``PurchasesError/verificationFailed``, or ``PurchasesError/invalidProductID(_:)``.
-    func purchase(productID: String) async throws -> (product: StoreProduct, transaction: Transaction)
+    func purchase(productID: String) async throws -> (product: StoreProduct, transaction: StoreTransaction)
     /// Synchronizes with the App Store and re-evaluates the current entitlements.
     ///
     /// You typically call this from a "Restore Purchases" button.
