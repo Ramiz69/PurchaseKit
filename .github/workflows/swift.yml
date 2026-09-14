@@ -41,6 +41,34 @@ jobs:
       - name: Run Tests
         run: swift test -v
 
+      - name: Build for every declared platform
+        run: |
+          # `swift build` only compiles for the host, so a platform-specific failure never
+          # showed up here: the package declared visionOS while calling a StoreKit API that
+          # does not exist there, and nothing noticed. Build the library for each platform
+          # in Package.swift and fail on the first one that does not compile.
+          for destination in \
+            "generic/platform=iOS" \
+            "generic/platform=macOS,variant=Mac Catalyst" \
+            "generic/platform=watchOS" \
+            "generic/platform=tvOS" \
+            "generic/platform=visionOS"
+          do
+            echo "::group::$destination"
+            if xcodebuild build -scheme RKPurchaseKit -destination "$destination" \
+                 -derivedDataPath platform-builds CODE_SIGNING_ALLOWED=NO > platform-build.log 2>&1
+            then
+              grep -E "warning:" platform-build.log | sort -u || true
+              echo "$destination: build succeeded"
+              echo "::endgroup::"
+            else
+              echo "::endgroup::"
+              grep -E "error:" platform-build.log | sort -u
+              echo "::error::The package does not build for $destination."
+              exit 1
+            fi
+          done
+
       - name: Generate DocC
         run: |
          mkdir -p docs

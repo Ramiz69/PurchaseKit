@@ -1,14 +1,14 @@
-# RKPurchaseKit
+# ``RKPurchaseKit``
 
 @Metadata {
     @DisplayName("PurchaseKit")
     @SupportedLanguage(swift)
-    @Available(iOS, introduced: "15.0")
-    @Available(tvOS, introduced: "15.0")
-    @Available(macOS, introduced: "12.0")
-    @Available(macCatalyst, introduced: "15.0")
-    @Available(watchOS, introduced: "8.0")
-    @Available(visionOS, introduced: "1.0")
+    @Available(iOS, introduced: "26.0")
+    @Available(tvOS, introduced: "26.0")
+    @Available(macOS, introduced: "26.0")
+    @Available(macCatalyst, introduced: "26.0")
+    @Available(watchOS, introduced: "26.0")
+    @Available(visionOS, introduced: "26.0")
     @PageColor(green)
 }
 

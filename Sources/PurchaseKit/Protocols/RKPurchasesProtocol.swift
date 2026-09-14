@@ -7,6 +7,9 @@
 
 import Foundation
 import StoreKit
+#if os(visionOS)
+public import UIKit
+#endif
 
 /// Protocol abstraction to allow mocking in tests.
 /// Full spec: <doc:PurchasesProtocol>
@@ -21,7 +24,10 @@ public protocol PurchasesProtocol: Sendable {
     /// - Returns: Array of ``StoreProduct``.
     /// - Throws: ``PurchasesError`` if StoreKit lookup fails.
     func requestProducts(includingCache: Bool) async throws -> [StoreProduct]
+    #if !os(visionOS)
     /// Starts a purchase flow for the given product.
+    ///
+    /// Not part of the protocol on visionOS; see `purchase(productID:confirmIn:)`.
     ///
     /// - Parameter productID: A product identifier registered in App Store Connect.
     /// - Returns: The verified ``StoreProduct`` that has just been purchased, and the
@@ -29,6 +35,28 @@ public protocol PurchasesProtocol: Sendable {
     /// - Throws: ``PurchasesError/purchaseCancelled``, ``PurchasesError/purchasePending``,
     ///           ``PurchasesError/verificationFailed``, or ``PurchasesError/invalidProductID(_:)``.
     func purchase(productID: String) async throws -> (product: StoreProduct, transaction: StoreTransaction)
+    #endif
+    #if os(visionOS)
+    /// Starts a purchase flow for the given product, presenting the App Store confirmation
+    /// in `scene`.
+    ///
+    /// visionOS has no scene-less purchase call, so this replaces
+    /// `purchase(productID:)` there. It is a requirement rather than a manager-only method
+    /// so that a stand-in implementation can represent a purchase on visionOS too.
+    ///
+    /// - Parameters:
+    ///   - productID: A product identifier registered in App Store Connect.
+    ///   - scene: The scene the system uses to show the purchase confirmation.
+    /// - Returns: The verified ``StoreProduct`` that has just been purchased, and the
+    ///   ``StoreTransaction`` describing the purchase.
+    /// - Throws: ``PurchasesError/purchaseCancelled``, ``PurchasesError/purchasePending``,
+    ///           ``PurchasesError/verificationFailed``, or ``PurchasesError/invalidProductID(_:)``.
+    @MainActor
+    func purchase(
+        productID: String,
+        confirmIn scene: UIScene
+    ) async throws -> (product: StoreProduct, transaction: StoreTransaction)
+    #endif
     /// Synchronizes with the App Store and re-evaluates the current entitlements.
     ///
     /// You typically call this from a "Restore Purchases" button.
