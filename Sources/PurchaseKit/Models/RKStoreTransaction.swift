@@ -5,8 +5,8 @@
 //  Created by Ramiz Kichibekov on 11.05.2025.
 //
 
-import Foundation
-import StoreKit
+public import Foundation
+public import StoreKit
 
 /// Immutable value describing a completed `StoreKit` transaction.
 ///

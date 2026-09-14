@@ -5,6 +5,7 @@
 //  Created by Ramiz Kichibekov on 11.05.2025.
 //
 
+import Foundation
 import Testing
 @testable import RKPurchaseKit
 

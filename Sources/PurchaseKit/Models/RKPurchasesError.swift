@@ -5,7 +5,7 @@
 //  Created by Ramiz Kichibekov on 11.05.2025.
 //
 
-import Foundation
+public import Foundation
 
 /// All error cases thrown by the SDK.
 /// See <doc:PurchasesError>
@@ -20,7 +20,7 @@ public enum PurchasesError: Error, Sendable {
     /// `Product.PurchaseResult` is non-frozen, so a newer StoreKit can report an outcome
     /// that predates this build.
     case unhandledPurchaseResult
-    case unknown(Error)
+    case unknown(any Error)
 }
 
 // `Error` is not `Equatable`, so the conformance cannot be synthesised. Written out so
