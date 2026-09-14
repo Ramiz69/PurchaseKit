@@ -17,7 +17,7 @@ https://github.com/Ramiz69/PurchaseKit.git
 ```
 In Package.swift:
 ```text
-.package(url: "https://github.com/Ramiz69/PurchaseKit.git", from: "3.0.1")
+.package(url: "https://github.com/Ramiz69/PurchaseKit.git", from: "3.1.0")
 ```
 
 ### ✅ Features
