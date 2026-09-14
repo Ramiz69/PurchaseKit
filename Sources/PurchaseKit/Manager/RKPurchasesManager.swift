@@ -8,6 +8,9 @@
 import Foundation
 import StoreKit
 import Synchronization
+#if os(visionOS)
+public import UIKit
+#endif
 
 /// ``PurchasesManager`` – entry point to `RKPurchaseKit`.
 ///
@@ -127,11 +130,48 @@ public actor PurchasesManager: PurchasesProtocol {
 
         return configuredProducts
     }
+    #if !os(visionOS)
     /// Performs a purchase flow for the given product identifier.
+    ///
+    /// Not available on visionOS, where StoreKit has no purchase call without a scene to
+    /// present the confirmation in. Use `purchase(productID:confirmIn:)` there.
     public func purchase(productID: String) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
         let product = try await storeKitProduct(for: productID)
 
-        switch try await product.purchase() {
+        return try await finishPurchase(try await product.purchase(), of: product)
+    }
+    #endif
+
+    #if os(visionOS)
+    /// Performs a purchase flow for the given product identifier, presenting the App Store
+    /// confirmation in `scene`.
+    ///
+    /// visionOS has no purchase call without a scene: `Product.purchase(options:)` is
+    /// unavailable there, because a spatial app can show several windows and the system has
+    /// to be told which one owns the confirmation sheet. Pass the scene the customer
+    /// interacted with. In SwiftUI, prefer StoreKit's `PurchaseAction` from the environment,
+    /// which resolves the scene for you.
+    ///
+    /// Runs on the main actor because StoreKit presents UI in `scene`; the entitlement
+    /// bookkeeping afterwards still happens on this actor.
+    @MainActor
+    public func purchase(
+        productID: String,
+        confirmIn scene: UIScene
+    ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
+        let product = try await storeKitProduct(for: productID)
+        let result = try await product.purchase(confirmIn: scene)
+
+        return try await finishPurchase(result, of: product)
+    }
+    #endif
+    /// Settles a purchase result: verifies and finishes the transaction, updates the cache
+    /// and emits the event. Shared by every purchase entry point so they cannot drift apart.
+    private func finishPurchase(
+        _ purchaseResult: Product.PurchaseResult,
+        of product: Product
+    ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
+        switch purchaseResult {
         case .success(let result):
             let transaction = try checkVerified(result)
             await transaction.finish()

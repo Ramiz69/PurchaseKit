@@ -8,6 +8,9 @@
 import Foundation
 import Synchronization
 import Testing
+#if os(visionOS)
+import UIKit
+#endif
 import StoreKit
 @testable import RKPurchaseKit
 
@@ -29,6 +32,16 @@ struct PurchasesProtocolTests {
 
             return catalogue
         }
+
+        #if os(visionOS)
+        @MainActor
+        func purchase(
+            productID: String,
+            confirmIn scene: UIScene
+        ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
+            try await purchase(productID: productID)
+        }
+        #endif
 
         func purchase(productID: String) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
             guard let product = catalogue.first(where: { $0.productID == productID }) else {

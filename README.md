@@ -27,6 +27,16 @@ In Package.swift:
 - Static linking support (type: .static)
 - Support for iOS, macOS, tvOS, watchOS, visionOS (26 and later)
 
+### 🕶 visionOS
+
+StoreKit has no scene-less purchase call on visionOS, so `purchase(productID:)` is not available there. Use `purchase(productID:confirmIn:)` and pass the scene the customer is interacting with:
+
+```swift
+let result = try await PurchasesManager.shared.purchase(productID: "pro.monthly", confirmIn: scene)
+```
+
+In SwiftUI, StoreKit's `PurchaseAction` from the environment resolves the scene for you.
+
 ### ⚠️ Migrating to 3.0
 
 **From 2.0** — one change affects you:
