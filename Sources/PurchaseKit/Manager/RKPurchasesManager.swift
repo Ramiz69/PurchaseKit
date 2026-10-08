@@ -204,27 +204,34 @@ public actor PurchasesManager: PurchasesProtocol {
     }
     /// Returns `true` if the user currently has an active entitlement for `productID`.
     ///
-    /// A cached `true` is taken at face value as a fast path. Anything else is resolved
-    /// against `Transaction.currentEntitlements`, because a cached `false` only means the
-    /// entitlement has not been observed yet.
+    /// Always resolved against `Transaction.currentEntitlements`, and the cached flag is brought
+    /// into line with the answer in both directions.
     public func hasEntitlement(for productID: String) async -> Bool {
-        // The cache is authoritative only when it says yes. A cached `false` may simply mean
-        // the entitlement has not been read yet — a purchase made on another device, or a cold
-        // start before the first refresh — so that case has to reach StoreKit. Returning the
-        // cached `false` directly made those users look unentitled.
-        if productsCache[productID]?.isPurchased == true {
-            return true
-        }
-
+        // StoreKit is asked every time. A cached `false` may only mean the entitlement has not
+        // been read yet — a purchase made on another device, or a cold start before the first
+        // refresh. A cached `true` used to be taken at face value, but it can outlive the
+        // entitlement too: a revocation StoreKit never announces through `Transaction.updates`,
+        // such as a cleared `SKTestSession`, left the product looking purchased for as long as
+        // the process ran.
+        var isEntitled = false
         for await result in Transaction.currentEntitlements {
             guard let transaction = try? checkVerified(result) else { continue }
 
             if transaction.productID == productID, transaction.revocationDate == nil {
-                return true
+                isEntitled = true
+                break
             }
         }
 
-        return false
+        if let cached = productsCache[productID], cached.isPurchased != isEntitled {
+            let updated = cached.setPurchasingFlag(isEntitled)
+            productsCache[productID] = updated
+            if isEntitled {
+                broadcaster.yield(PurchasedProductEvent(product: updated))
+            }
+        }
+
+        return isEntitled
     }
     /// Returns the set of product identifiers for which the user has an active entitlement.
     public func entitlementProductIDs() async -> Set<String> {
