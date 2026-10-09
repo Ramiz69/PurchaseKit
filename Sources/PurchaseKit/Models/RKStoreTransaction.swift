@@ -47,13 +47,21 @@ public struct StoreTransaction: Sendable {
     public let appAccountToken: UUID?
     /// Subscription group of an auto-renewable subscription. `nil` for other product types.
     public let subscriptionGroupID: String?
+    /// The transaction as the App Store signed it: a JWS your server can verify with the App
+    /// Store Server Library before it grants anything.
+    ///
+    /// Send this, not the decoded fields: the fields above are what the device read, and a
+    /// server that trusts them trusts the device. `nil` for a value you construct yourself
+    /// unless you pass one.
+    public let jwsRepresentation: String?
 
     // MARK: Initial methods
 
     /// Designated initializer. You don't create `StoreTransaction` this way in apps —
     /// it is produced by the kit from `StoreKit.Transaction`.
-    init(transaction: Transaction) {
+    init(transaction: Transaction, jwsRepresentation: String? = nil) {
         self.transaction = transaction
+        self.jwsRepresentation = jwsRepresentation
         id = transaction.id
         originalID = transaction.originalID
         productID = transaction.productID
@@ -81,9 +89,11 @@ public struct StoreTransaction: Sendable {
         isUpgraded: Bool = false,
         purchasedQuantity: Int = 1,
         appAccountToken: UUID? = nil,
-        subscriptionGroupID: String? = nil
+        subscriptionGroupID: String? = nil,
+        jwsRepresentation: String? = nil
     ) {
         transaction = nil
+        self.jwsRepresentation = jwsRepresentation
         self.id = id
         self.originalID = originalID ?? id
         self.productID = productID

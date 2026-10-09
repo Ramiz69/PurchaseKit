@@ -16,5 +16,6 @@ Normally the kit builds these for you from `StoreKit.Transaction`, and ``StoreTr
 - ``StoreTransaction/purchasedQuantity``
 - ``StoreTransaction/appAccountToken``
 - ``StoreTransaction/subscriptionGroupID``
+- ``StoreTransaction/jwsRepresentation`` – the App Store's signed form, for your server to verify
 
 > Tip: When only `id` and `productID` matter, the identity fields default sensibly — `originalID` falls back to `id` and `originalPurchaseDate` to `purchaseDate`.

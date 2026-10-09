@@ -116,6 +116,32 @@ StoreProduct/subscriptionGroupID (derived from Product.subscription.subscription
 See: ``PurchasesManager/activeSubscriptions()``, ``PurchasesManager/activeSubscription(inGroup:)``,
 ``StoreProduct/subscriptionGroupID``.
 ---
+## 7½  Server-verified consumables <a id="server-verified"></a>
+
+When your **server** credits a purchase to an account - coins, tokens, credits - the device
+must not finish the transaction before the server has accepted it. A finished consumable is
+never redelivered, so finishing first and then losing the request to your server leaves the
+customer charged with nothing to show for it.
+
+Configure manual finishing and buy for the signed-in account:
+
+```swift
+PurchasesManager.configure(identifiers: ["com.myapp.coins.100"], finishing: .manual)
+
+let (_, transaction) = try await PurchasesManager.shared
+    .purchase(productID: "com.myapp.coins.100", appAccountToken: user.id)
+
+try await api.creditPurchase(signed: transaction.jwsRepresentation!) // your server verifies the JWS
+await PurchasesManager.shared.finish(transaction)                    // only after it accepted
+```
+
+Purchases that complete outside the call - Ask to Buy approvals, pending payments, the
+unfinished ones replayed at launch - arrive through ``PurchasesManager/transactionUpdates``.
+Handle them the same way, and drain ``PurchasesManager/unfinishedTransactions()`` at launch
+and after sign-in so nothing a previous run missed is left behind. Mock the whole flow
+through ``ServerVerifiedPurchasesProtocol``.
+
+---
 ## 8  Testing & mocking
 
 Depend on PurchasesProtocol in your app code and inject a mock in tests:

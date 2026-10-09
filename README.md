@@ -17,7 +17,7 @@ https://github.com/Ramiz69/PurchaseKit.git
 ```
 In Package.swift:
 ```text
-.package(url: "https://github.com/Ramiz69/PurchaseKit.git", from: "3.1.1")
+.package(url: "https://github.com/Ramiz69/PurchaseKit.git", from: "3.2.0")
 ```
 
 ### ✅ Features
@@ -26,6 +26,24 @@ In Package.swift:
 - DocC documentation
 - Static linking support (type: .static)
 - Support for iOS, macOS, tvOS, watchOS, visionOS (26 and later)
+
+### 🧾 Server-verified consumables
+
+If your server credits purchases to an account, finish transactions only after it has
+accepted them - a finished consumable is never redelivered:
+
+```swift
+PurchasesManager.configure(identifiers: ["com.myapp.coins.100"], finishing: .manual)
+
+let (_, transaction) = try await PurchasesManager.shared
+    .purchase(productID: "com.myapp.coins.100", appAccountToken: user.id)
+try await api.creditPurchase(signed: transaction.jwsRepresentation!)
+await PurchasesManager.shared.finish(transaction)
+```
+
+Also handle `transactionUpdates` (Ask to Buy, pending payments, replays at launch) and drain
+`unfinishedTransactions()` at launch. Everything here is additive: the default stays
+`.automatic`, and existing code behaves exactly as before.
 
 ### 🕶 visionOS
 

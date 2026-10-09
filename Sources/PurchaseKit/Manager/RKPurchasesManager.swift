@@ -18,11 +18,11 @@ public import UIKit
 /// It holds a product cache, listens for `Transaction.updates`, and exposes a simple
 /// API for fetching products, purchasing, restoring, and querying current entitlements.
 /// See <doc:PurchasesManager> for the overview.
-public actor PurchasesManager: PurchasesProtocol {
+public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
 
     // MARK: Properties
 
-    /// Global singleton configured via ``configure(identifiers:)``.
+    /// Global singleton configured via ``configure(identifiers:finishing:)``.
     public nonisolated static var shared: PurchasesManager {
         guard let instance = storage.withLock({ $0 }) else {
             fatalError("❗️ PurchasesManager.configure(identifiers:) must be called before first use.")
@@ -34,7 +34,7 @@ public actor PurchasesManager: PurchasesProtocol {
     ///
     /// ``shared`` is the convenient form and treats a missing configuration as a programmer
     /// error. Use this where the caller can react instead — a plug-in surface, or a path
-    /// that may run before ``configure(identifiers:)``.
+    /// that may run before ``configure(identifiers:finishing:)``.
     ///
     /// - Throws: ``PurchasesError/notConfigured``.
     public nonisolated static func resolved() throws -> PurchasesManager {
@@ -56,9 +56,24 @@ public actor PurchasesManager: PurchasesProtocol {
     public nonisolated var purchasedProducts: AsyncStream<PurchasedProductEvent> {
         broadcaster.makeStream()
     }
+    /// Every verified transaction StoreKit delivers outside a purchase call.
+    ///
+    /// Under ``FinishPolicy/manual`` these arrive unfinished: forward each to your server
+    /// and call ``finish(_:)`` once it has been accepted. Under ``FinishPolicy/automatic``
+    /// they are already finished and the stream is informational.
+    ///
+    /// Each access returns a fresh stream; events are not replayed and a slow subscriber
+    /// drops the oldest. Nothing is lost under ``FinishPolicy/manual``: an unfinished
+    /// transaction stays in StoreKit and ``unfinishedTransactions()`` returns it.
+    public nonisolated var transactionUpdates: AsyncStream<StoreTransaction> {
+        transactionBroadcaster.makeStream()
+    }
+    /// Who finishes transactions, fixed at ``configure(identifiers:finishing:)``.
+    public nonisolated let finishPolicy: FinishPolicy
     private let identifiers: [String]
     private var productsCache: [String: StoreProduct] = [:]
     private let broadcaster = EventBroadcaster<PurchasedProductEvent>()
+    private let transactionBroadcaster = EventBroadcaster<StoreTransaction>()
     private var updateListenerTask: Task<Void, Never>?
     /// Backing store for ``shared``.
     ///
@@ -71,7 +86,8 @@ public actor PurchasesManager: PurchasesProtocol {
 
     // MARK: Initial methods
 
-    private init(identifiers: [String]) {
+    private init(identifiers: [String], finishing finishPolicy: FinishPolicy) {
+        self.finishPolicy = finishPolicy
         // Keep the caller's order but drop repeats: the order is what `requestProducts`
         // returns, and a duplicated identifier would surface the same product twice.
         var seen: Set<String> = []
@@ -81,16 +97,23 @@ public actor PurchasesManager: PurchasesProtocol {
     deinit {
         updateListenerTask?.cancel()
         broadcaster.finish()
+        transactionBroadcaster.finish()
     }
 
     // MARK: Public methods
 
     /// Creates the singleton and starts the StoreKit transaction listener.
     ///
-    /// - Parameter identifiers: Product IDs registered in App Store Connect.
+    /// - Parameters:
+    ///   - identifiers: Product IDs registered in App Store Connect.
+    ///   - finishing: Who finishes transactions. Use ``FinishPolicy/manual`` when your server
+    ///     credits purchases, so nothing is finished before the server has accepted it.
     /// - Returns: The configured singleton instance.
     @discardableResult
-    public nonisolated static func configure(identifiers: [String]) -> PurchasesManager {
+    public nonisolated static func configure(
+        identifiers: [String],
+        finishing: FinishPolicy = .automatic
+    ) -> PurchasesManager {
         // Test and set under one lock. Checking `instance == nil` and assigning separately is
         // a check-then-act on unsynchronised memory: two concurrent calls could both pass the
         // check, and the precondition that is supposed to forbid that would not fire.
@@ -99,7 +122,7 @@ public actor PurchasesManager: PurchasesProtocol {
                 stored == nil,
                 "PurchasesManager.configure(_:) has already been called. Double configuration is not allowed."
             )
-            let instance = PurchasesManager(identifiers: identifiers)
+            let instance = PurchasesManager(identifiers: identifiers, finishing: finishing)
             stored = instance
 
             return instance
@@ -136,9 +159,26 @@ public actor PurchasesManager: PurchasesProtocol {
     /// Not available on visionOS, where StoreKit has no purchase call without a scene to
     /// present the confirmation in. Use `purchase(productID:confirmIn:)` there.
     public func purchase(productID: String) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
+        try await purchase(productID: productID, appAccountToken: nil)
+    }
+    /// Buys `productID` on behalf of the account identified by `appAccountToken`.
+    ///
+    /// StoreKit signs the token into the transaction, so a server can refuse to credit a
+    /// purchase made for a different account. Under ``FinishPolicy/manual`` the returned
+    /// transaction is unfinished: send ``StoreTransaction/jwsRepresentation`` to the server,
+    /// then call ``finish(_:)``.
+    ///
+    /// Not available on visionOS. Use `purchase(productID:appAccountToken:confirmIn:)` there.
+    public func purchase(
+        productID: String,
+        appAccountToken: UUID?
+    ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
         let product = try await storeKitProduct(for: productID)
 
-        return try await finishPurchase(try await product.purchase(), of: product)
+        return try await finishPurchase(
+            try await product.purchase(options: Self.options(appAccountToken: appAccountToken)),
+            of: product
+        )
     }
     #endif
 
@@ -159,12 +199,63 @@ public actor PurchasesManager: PurchasesProtocol {
         productID: String,
         confirmIn scene: UIScene
     ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
+        try await purchase(productID: productID, appAccountToken: nil, confirmIn: scene)
+    }
+    /// Buys `productID` on behalf of the account identified by `appAccountToken`, presenting
+    /// the App Store confirmation in `scene`.
+    ///
+    /// See ``purchase(productID:confirmIn:)`` for why visionOS needs the scene.
+    @MainActor
+    public func purchase(
+        productID: String,
+        appAccountToken: UUID?,
+        confirmIn scene: UIScene
+    ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
         let product = try await storeKitProduct(for: productID)
-        let result = try await product.purchase(confirmIn: scene)
+        let result = try await product.purchase(
+            confirmIn: scene,
+            options: Self.options(appAccountToken: appAccountToken)
+        )
 
         return try await finishPurchase(result, of: product)
     }
     #endif
+    /// Finishes `transaction`, telling the App Store it has been delivered.
+    ///
+    /// Call under ``FinishPolicy/manual`` after your server has accepted the transaction.
+    /// A value built by the kit carries its StoreKit transaction; one you built yourself is
+    /// looked up in `Transaction.unfinished` by ``StoreTransaction/id``. Finishing a
+    /// transaction that is already finished does nothing.
+    public func finish(_ transaction: StoreTransaction) async {
+        if let storeKitTransaction = transaction.transaction {
+            await storeKitTransaction.finish()
+        } else {
+            for await result in Transaction.unfinished {
+                guard let unfinished = try? checkVerified(result), unfinished.id == transaction.id else {
+                    continue
+                }
+
+                await unfinished.finish()
+                break
+            }
+        }
+        await refreshEntitlements()
+    }
+    /// Verified transactions StoreKit still holds as unfinished.
+    ///
+    /// Under ``FinishPolicy/manual`` this is the list of purchases the server has not yet
+    /// accepted. Read it at launch and after sign-in. Transactions that fail verification
+    /// are left out: a server that checks the signature would reject them anyway.
+    public func unfinishedTransactions() async -> [StoreTransaction] {
+        var transactions: [StoreTransaction] = []
+        for await result in Transaction.unfinished {
+            guard let transaction = try? checkVerified(result) else { continue }
+
+            transactions.append(StoreTransaction(transaction: transaction, jwsRepresentation: result.jwsRepresentation))
+        }
+
+        return transactions
+    }
     /// Settles a purchase result: verifies and finishes the transaction, updates the cache
     /// and emits the event. Shared by every purchase entry point so they cannot drift apart.
     private func finishPurchase(
@@ -174,7 +265,12 @@ public actor PurchasesManager: PurchasesProtocol {
         switch purchaseResult {
         case .success(let result):
             let transaction = try checkVerified(result)
-            await transaction.finish()
+            // Under `.manual` the app finishes once its server has credited the purchase.
+            // Finishing here first would lose a consumable for good if that request then fails:
+            // a finished consumable is never redelivered.
+            if finishPolicy == .automatic {
+                await transaction.finish()
+            }
             // Read the flag *after* the suspension above. The transaction listener may have
             // rebuilt entitlements while this was suspended and already emitted for this
             // product; re-reading here keeps a purchase to one event. Caching straight to
@@ -186,7 +282,10 @@ public actor PurchasesManager: PurchasesProtocol {
                 broadcaster.yield(PurchasedProductEvent(product: purchased))
             }
 
-            return (product: purchased, transaction: StoreTransaction(transaction: transaction))
+            return (
+                product: purchased,
+                transaction: StoreTransaction(transaction: transaction, jwsRepresentation: result.jwsRepresentation)
+            )
         case .userCancelled:
             throw PurchasesError.purchaseCancelled
         case .pending:
@@ -305,7 +404,7 @@ public actor PurchasesManager: PurchasesProtocol {
     // MARK: Private methods
 
     /// Cached products for the configured identifiers, in the order passed to
-    /// ``configure(identifiers:)``.
+    /// ``configure(identifiers:finishing:)``.
     ///
     /// `productsCache` is keyed by identifier, so iterating it yields a different order on
     /// every run and shuffles the paywall. It also holds products cached opportunistically
@@ -355,7 +454,13 @@ public actor PurchasesManager: PurchasesProtocol {
     private func handle(_ result: VerificationResult<Transaction>) async {
         guard let transaction = try? checkVerified(result) else { return }
 
-        await transaction.finish()
+        // Same rule as a purchase: under `.manual` the app finishes after its server has
+        // accepted the transaction. Ask to Buy approvals and payments that completed later
+        // arrive only here, so finishing them unconditionally would skip the server entirely.
+        if finishPolicy == .automatic {
+            await transaction.finish()
+        }
+        transactionBroadcaster.yield(StoreTransaction(transaction: transaction, jwsRepresentation: result.jwsRepresentation))
         // `Transaction.updates` also delivers revocations: refunds, a family-sharing grant
         // being withdrawn, an entitlement expiring. Marking the product purchased could only
         // ever set the flag to `true`, so a refund arrived here as a purchase — and emitted a
@@ -425,6 +530,12 @@ public actor PurchasesManager: PurchasesProtocol {
         }
 
         return fetched
+    }
+
+    private static func options(appAccountToken: UUID?) -> Set<Product.PurchaseOption> {
+        guard let appAccountToken else { return [] }
+
+        return [.appAccountToken(appAccountToken)]
     }
 
     private func compare(_ lhs: Date?, isLaterThan rhs: Date?) -> Bool {

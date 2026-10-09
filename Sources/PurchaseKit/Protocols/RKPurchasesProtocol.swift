@@ -17,7 +17,7 @@ public protocol PurchasesProtocol: Sendable {
     /// Fetches products from StoreKit (optionally returns cached values first).
     ///
     /// Internally uses `Product.products(for:)` for the identifiers passed to
-    /// ``PurchasesManager/configure(identifiers:)``.
+    /// ``PurchasesManager/configure(identifiers:finishing:)``.
     ///
     /// - Parameter includingCache: If `true`, returns cached products immediately
     ///   and refreshes entitlements in the background.
