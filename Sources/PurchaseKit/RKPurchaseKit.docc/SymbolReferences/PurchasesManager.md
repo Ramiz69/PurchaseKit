@@ -7,13 +7,20 @@ It handles product fetching, purchases, restoration, entitlement evaluation, and
 ## Topics
 
 ### Configuration
-- ``configure(identifiers:)``
+- ``configure(identifiers:finishing:)``
+- ``finishPolicy``
 - ``shared``
 
 ### Operations
 - ``requestProducts(includingCache:)``
 - ``purchase(productID:)``
 - ``restore()``
+
+### Server-verified purchases
+- ``purchase(productID:appAccountToken:)``
+- ``finish(_:)``
+- ``unfinishedTransactions()``
+- ``transactionUpdates``
 
 ### Entitlements & Subscriptions
 - ``hasEntitlement(for:)``

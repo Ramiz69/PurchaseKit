@@ -26,11 +26,16 @@
   - ``PurchasesManager/activeSubscriptions()``
   - ``PurchasesManager/activeSubscription(inGroup:)``
 - Simple value model: ``StoreProduct`` (with ``StoreProduct/subscriptionGroupID``)
+- **Server-verified consumables**: buy with an `appAccountToken`, send
+  ``StoreTransaction/jwsRepresentation`` to your server and finish only after it accepts -
+  ``FinishPolicy/manual``, ``ServerVerifiedPurchasesProtocol``
 
 @Links(visualStyle: detailedGrid) {
     - <doc:GettingStarted>
     - <doc:PurchasesManager>
     - <doc:PurchasesProtocol>
+    - <doc:ServerVerifiedPurchasesProtocol>
+    - <doc:FinishPolicy>
     - <doc:StoreProduct>
     - <doc:PurchasesError>
     - <doc:PurchasedProductEvent>
