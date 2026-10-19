@@ -17,15 +17,49 @@ https://github.com/Ramiz69/PurchaseKit.git
 ```
 In Package.swift:
 ```text
-.package(url: "https://github.com/Ramiz69/PurchaseKit.git", from: "3.2.0")
+.package(url: "https://github.com/Ramiz69/PurchaseKit.git", from: "4.0.0")
 ```
 
 ### ✅ Features
--	async/await API
+- async/await API
 - actor-based PurchasesManager
+- Typed errors: StoreKit failures arrive as `PurchasesError` cases (`networkUnavailable`, `purchaseNotAllowed`, …)
+- Purchase options: account token, quantity, promotional offers (server-signed JWS), win-back offers
+- Subscription status: renewal info, grace period and billing retry, intro-offer eligibility, live status updates
+- Subscription bundles and suites (`ProductType.isAutoRenewableSubscription`)
+- Server-verified purchases with manual finishing
+- App purchase info (`AppTransaction`) for paid-to-free migrations
+- Every model has a public initializer, so `PurchasesProtocol` is fully mockable
 - DocC documentation
 - Static linking support (type: .static)
-- Support for iOS, macOS, tvOS, watchOS, visionOS (26 and later)
+- Support for iOS, macOS, Mac Catalyst, tvOS, watchOS, visionOS (26 and later)
+
+### 🔁 Subscription status
+
+```swift
+let purchases = PurchasesManager.shared
+
+if let status = try await purchases.subscriptionStatus(inGroup: "com.myapp.subscriptions.premium") {
+    switch status.state {
+    case .inGracePeriod, .inBillingRetryPeriod:
+        showUpdatePaymentBanner()          // the renewal payment failed
+    case .subscribed where !status.willAutoRenew:
+        showResubscribeHint()              // turned off auto-renew
+    default:
+        break
+    }
+}
+
+Task {
+    for await status in purchases.subscriptionStatusUpdates {
+        await model.apply(status)          // renewals, expirations, plan changes
+    }
+}
+```
+
+Before showing a free trial, ask `isEligibleForIntroOffer(inGroup:)`. Promotional offers are
+signed on your server and passed in `PurchaseOptions(promotionalOffer:)`; win-back offers come
+from `StoreProduct.winBackOffers` and need no signature.
 
 ### 🧾 Server-verified consumables
 
@@ -54,6 +88,18 @@ let result = try await PurchasesManager.shared.purchase(productID: "pro.monthly"
 ```
 
 In SwiftUI, StoreKit's `PurchaseAction` from the environment resolves the scene for you.
+
+### ⚠️ Migrating to 4.0
+
+Call sites mostly compile unchanged. What breaks:
+
+- **`ProductType`** gained `subscriptionBundle` and `subscriptionSuite`, and **`PurchasesError`** gained cases for StoreKit's own failures. Exhaustive `switch` statements need the new cases or a `default` branch.
+- **StoreKit errors are now `PurchasesError`.** A `catch let error as StoreKitError` no longer matches; catch the case instead (`.networkUnavailable`, `.purchaseNotAllowed`, …).
+- **`PurchasesProtocol` mocks** implement `purchase(productID:options:)` instead of `purchase(productID:)`, plus `subscriptionStatuses(inGroup:)`, `isEligibleForIntroOffer(inGroup:)` and `appPurchaseInfo()`. `ServerVerifiedPurchasesProtocol` no longer requires `purchase(productID:appAccountToken:)`; both short forms are extension methods now.
+- **`StoreProduct(…)`** requires `currencyCode:` after `displayPrice:`.
+- **`activeSubscriptions()`** now includes subscription bundles and suites.
+
+The full guide with before/after code: [Migrating to PurchaseKit 4](https://ramiz69.github.io/PurchaseKit/documentation/rkpurchasekit/migratingto4).
 
 ### ⚠️ Migrating to 3.0
 

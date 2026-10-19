@@ -40,9 +40,9 @@ let products: [StoreProduct] =
 
 ```swift
 do {
-    let product = try await PurchasesManager.shared
+    let (product, transaction) = try await PurchasesManager.shared
                         .purchase(productID: "com.myapp.pro")
-    print("🎉 Purchased:", product.displayName)
+    print("🎉 Purchased:", product.displayName, "transaction", transaction.id)
 } catch PurchasesError.purchaseCancelled {
     // user tapped “Cancel” – usually no error UI needed
 } catch {
@@ -50,7 +50,16 @@ do {
 }
 ```
 
-The call throws typed errors defined in ``PurchasesError``.
+The call throws typed errors defined in ``PurchasesError``, including StoreKit's own
+failures such as ``PurchasesError/networkUnavailable``.
+
+To buy for an account, buy several units, or apply an offer, pass ``PurchaseOptions``:
+
+```swift
+let options = PurchaseOptions(appAccountToken: user.id, quantity: 3)
+let result = try await PurchasesManager.shared
+    .purchase(productID: "com.myapp.consumable.coin", options: options)
+```
 
 ---
 ## 4  Listen to purchase events
@@ -115,6 +124,18 @@ StoreProduct/subscriptionGroupID (derived from Product.subscription.subscription
 
 See: ``PurchasesManager/activeSubscriptions()``, ``PurchasesManager/activeSubscription(inGroup:)``,
 ``StoreProduct/subscriptionGroupID``.
+
+Read the renewal state - grace period, billing retry, what it renews into:
+```swift
+if let status = try await PurchasesManager.shared
+    .subscriptionStatus(inGroup: "com.myapp.subscriptions.premium"),
+   status.state == .inGracePeriod {
+    // ask the customer to update their payment method
+}
+```
+
+<doc:Subscriptions> covers status, intro-offer eligibility, promotional and win-back offers.
+
 ---
 ## 7½  Server-verified consumables <a id="server-verified"></a>
 
@@ -148,14 +169,24 @@ Depend on PurchasesProtocol in your app code and inject a mock in tests:
 ```swift
 struct PurchasesMock: PurchasesProtocol {
     func requestProducts(includingCache: Bool) async throws -> [StoreProduct] { [] }
-    func purchase(productID: String) async throws -> StoreProduct { throw PurchasesError.purchaseCancelled }
+    func purchase(
+        productID: String,
+        options: PurchaseOptions
+    ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
+        throw PurchasesError.purchaseCancelled
+    }
     func restore() async throws { }
     func hasEntitlement(for productID: String) async -> Bool { productID == "com.myapp.pro" }
     func entitlementProductIDs() async -> Set<String> { ["com.myapp.pro"] }
     func activeSubscriptions() async -> [StoreProduct] { [] }
     func activeSubscription(inGroup groupID: String) async -> StoreProduct? { nil }
+    func subscriptionStatuses(inGroup groupID: String) async throws -> [StoreSubscriptionStatus] { [] }
+    func isEligibleForIntroOffer(inGroup groupID: String) async -> Bool { true }
+    func appPurchaseInfo() async throws -> AppPurchaseInfo { throw PurchasesError.unsupported }
 }
 ```
+`purchase(productID:)` is not a requirement: it calls `purchase(productID:options:)` with
+``PurchaseOptions/none``, so the mock above answers both.
 ---
 ## 9  Concurrency notes
 
@@ -168,5 +199,6 @@ Update UI on the main actor when reacting to events.
   <doc:PurchasesManager>.
 * For unit tests, depend on ``PurchasesProtocol`` instead of the concrete manager.
 * Check **Overview** for feature list and platform requirements.
+* Upgrading from 3.x? Read <doc:MigratingTo4>.
 
 Happy shipping 🚀
