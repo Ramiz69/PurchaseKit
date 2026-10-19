@@ -117,6 +117,10 @@ The full guide with before/after code: [Migrating to PurchaseKit 4](https://rami
 - **`requestProducts()` with no arguments** is now a distinct overload on `PurchasesProtocol`. Calls are unchanged; only a conformer that relied on the default implementation is affected, and that case no longer compiles rather than recursing forever at runtime.
 - `PurchasesError` now conforms to `Equatable` and `LocalizedError`, and `PurchasesManager.resolved()` returns the singleton by throwing `notConfigured` instead of trapping like `shared`.
 
+### 📱 Example app
+
+[`Examples/PaywallDemo`](Examples/PaywallDemo) is a SwiftUI paywall that reacts to every subscription state the App Store reports: subscribed, grace period, billing retry, expired (with the reason) and revoked. Open `PaywallDemo.xcodeproj` and press Run; the scheme loads a local StoreKit configuration, so no App Store Connect setup is needed. A demo-mode menu switches the same screen to a `PurchasesProtocol` mock for each state.
+
 ### 📚 Documentation
 
 - 🧭 [Online documentation →](https://ramiz69.github.io/PurchaseKit)

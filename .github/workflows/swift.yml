@@ -69,6 +69,12 @@ jobs:
             fi
           done
 
+      - name: Build the example app
+        run: |
+          # Examples/PaywallDemo uses the kit only through its public API, as a client would.
+          # Building it catches a public API change that breaks clients but not the tests.
+          xcodebuild build -project Examples/PaywallDemo/PaywallDemo.xcodeproj -scheme PaywallDemo -destination generic/platform=iOS\ Simulator CODE_SIGNING_ALLOWED=NO
+
       - name: Generate DocC
         run: |
          mkdir -p docs
