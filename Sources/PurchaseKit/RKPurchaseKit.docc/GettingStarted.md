@@ -50,8 +50,10 @@ do {
 }
 ```
 
-The call throws typed errors defined in ``PurchasesError``, including StoreKit's own
-failures such as ``PurchasesError/networkUnavailable``.
+The call throws ``PurchasesError``, whose ``PurchasesError/code`` names the failure, including
+StoreKit's own such as ``PurchasesError/Code/networkUnavailable``. Match a code in a `catch`
+clause as above, or bind the error and compare its code:
+`catch let error as PurchasesError where error.code == .purchasePending`.
 
 To buy for an account, buy several units, or apply an offer, pass ``PurchaseOptions``:
 
@@ -173,7 +175,7 @@ struct PurchasesMock: PurchasesProtocol {
         productID: String,
         options: PurchaseOptions
     ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
-        throw PurchasesError.purchaseCancelled
+        throw PurchasesError(.purchaseCancelled)
     }
     func restore() async throws { }
     func hasEntitlement(for productID: String) async -> Bool { productID == "com.myapp.pro" }
@@ -182,7 +184,7 @@ struct PurchasesMock: PurchasesProtocol {
     func activeSubscription(inGroup groupID: String) async -> StoreProduct? { nil }
     func subscriptionStatuses(inGroup groupID: String) async throws -> [StoreSubscriptionStatus] { [] }
     func isEligibleForIntroOffer(inGroup groupID: String) async -> Bool { true }
-    func appPurchaseInfo() async throws -> AppPurchaseInfo { throw PurchasesError.unsupported }
+    func appPurchaseInfo() async throws -> AppPurchaseInfo { throw PurchasesError(.unsupported) }
 }
 ```
 `purchase(productID:)` is not a requirement: it calls `purchase(productID:options:)` with

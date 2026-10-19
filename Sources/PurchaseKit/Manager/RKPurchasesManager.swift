@@ -41,10 +41,10 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
     /// error. Use this where the caller can react instead — a plug-in surface, or a path
     /// that may run before ``configure(identifiers:finishing:)``.
     ///
-    /// - Throws: ``PurchasesError/notConfigured``.
+    /// - Throws: ``PurchasesError/Code/notConfigured``.
     public nonisolated static func resolved() throws -> PurchasesManager {
         guard let instance = storage.withLock({ $0 }) else {
-            throw PurchasesError.notConfigured
+            throw PurchasesError(.notConfigured)
         }
 
         return instance
@@ -205,7 +205,7 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
     /// Not available on visionOS, where StoreKit has no purchase call without a scene to
     /// present the confirmation in. Use `purchase(productID:options:confirmIn:)` there.
     ///
-    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its cases.
+    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its codes.
     public func purchase(
         productID: String,
         options: PurchaseOptions
@@ -240,7 +240,7 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
     /// Runs on the main actor because StoreKit presents UI in `scene`; the entitlement
     /// bookkeeping afterwards still happens on this actor.
     ///
-    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its cases.
+    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its codes.
     @MainActor
     public func purchase(
         productID: String,
@@ -327,19 +327,19 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
                 transaction: StoreTransaction(transaction: transaction, jwsRepresentation: result.jwsRepresentation)
             )
         case .userCancelled:
-            throw PurchasesError.purchaseCancelled
+            throw PurchasesError(.purchaseCancelled)
         case .pending:
-            throw PurchasesError.purchasePending
+            throw PurchasesError(.purchasePending)
         default:
             // `Product.PurchaseResult` is non-frozen, so a StoreKit release can add a case
             // this SDK predates.
-            throw PurchasesError.unhandledPurchaseResult
+            throw PurchasesError(.unhandledPurchaseResult)
         }
     }
     /// Syncs with the App Store and refreshes current entitlements.
     ///
     /// - Throws: ``PurchasesError``; a dismissed sign-in prompt is
-    ///   ``PurchasesError/purchaseCancelled``.
+    ///   ``PurchasesError/Code/purchaseCancelled``.
     public func restore() async throws {
         do {
             try await AppStore.sync()
@@ -398,7 +398,7 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
     }
     /// Returns how and when the customer got the app itself.
     ///
-    /// - Throws: ``PurchasesError/verificationFailed`` if the app transaction fails
+    /// - Throws: ``PurchasesError/Code/verificationFailed`` if the app transaction fails
     ///   verification, or another ``PurchasesError`` if StoreKit cannot read it.
     public nonisolated func appPurchaseInfo() async throws -> AppPurchaseInfo {
         do {
@@ -484,7 +484,7 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
     nonisolated func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
         switch result {
         case .verified(let signed): signed
-        case .unverified: throw PurchasesError.verificationFailed
+        case .unverified: throw PurchasesError(.verificationFailed)
         }
     }
     private func updateCustomerProductStatus() async {
@@ -573,7 +573,7 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
 
     private func fetchProduct(for productID: String) async throws -> Product {
         guard let fetched = try await Product.products(for: [productID]).first else {
-            throw PurchasesError.invalidProductID(productID)
+            throw PurchasesError(.invalidProductID, productID: productID)
         }
 
         return fetched

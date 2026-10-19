@@ -61,7 +61,7 @@ struct PurchasesProtocolTests {
         ) throws -> (product: StoreProduct, transaction: StoreTransaction) {
             receivedOptions.withLock { $0.append(options) }
             guard let product = catalogue.first(where: { $0.productID == productID }) else {
-                throw PurchasesError.invalidProductID(productID)
+                throw PurchasesError(.invalidProductID, productID: productID)
             }
 
             return (
@@ -69,6 +69,7 @@ struct PurchasesProtocolTests {
                 transaction: StoreTransaction(
                     id: 1,
                     productID: productID,
+                    productType: product.type,
                     purchaseDate: Date(timeIntervalSince1970: 1_000_000)
                 )
             )
@@ -208,7 +209,7 @@ struct PurchasesProtocolTests {
     func mockRejectsUnknownProduct() async {
         let spy = SpyPurchases()
 
-        await #expect(throws: PurchasesError.invalidProductID("nope")) {
+        await #expect(throws: PurchasesError(.invalidProductID, productID: "nope")) {
             try await spy.purchase(productID: "nope")
         }
     }
@@ -321,10 +322,10 @@ struct PurchasesProtocolTests {
             transaction: StoreTransaction(
                 id: id,
                 productID: "pro.monthly",
+                productType: .autoRenewable,
                 purchaseDate: now,
                 expirationDate: now.addingTimeInterval(interval),
-                subscriptionGroupID: "group.pro",
-                productType: .autoRenewable
+                subscriptionGroupID: "group.pro"
             )
         )
     }

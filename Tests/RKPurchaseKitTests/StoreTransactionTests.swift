@@ -26,6 +26,7 @@ struct StoreTransactionTests {
         let transaction = StoreTransaction(
             id: 42,
             productID: "pro.monthly",
+            productType: .autoRenewable,
             purchaseDate: purchasedAt,
             originalID: 7,
             originalPurchaseDate: purchasedAt.addingTimeInterval(-86_400),
@@ -40,6 +41,7 @@ struct StoreTransactionTests {
         #expect(transaction.id == 42)
         #expect(transaction.originalID == 7)
         #expect(transaction.productID == "pro.monthly")
+        #expect(transaction.productType == .autoRenewable)
         #expect(transaction.purchaseDate == purchasedAt)
         #expect(transaction.expirationDate == expires)
         #expect(transaction.revocationDate == nil)
@@ -53,7 +55,7 @@ struct StoreTransactionTests {
     /// both identifiers at every call site would be noise.
     @Test("identity defaults fall back to the transaction itself")
     func defaultsIdentityToItself() {
-        let transaction = StoreTransaction(id: 99, productID: "tip.small", purchaseDate: purchasedAt)
+        let transaction = StoreTransaction(id: 99, productID: "tip.small", productType: .consumable, purchaseDate: purchasedAt)
 
         #expect(transaction.originalID == 99)
         #expect(transaction.originalPurchaseDate == purchasedAt)
@@ -61,7 +63,7 @@ struct StoreTransactionTests {
 
     @Test("subscription details default to absent")
     func appliesDefaults() {
-        let transaction = StoreTransaction(id: 1, productID: "tip.small", purchaseDate: purchasedAt)
+        let transaction = StoreTransaction(id: 1, productID: "tip.small", productType: .consumable, purchaseDate: purchasedAt)
 
         #expect(transaction.expirationDate == nil)
         #expect(transaction.revocationDate == nil)
@@ -69,7 +71,6 @@ struct StoreTransactionTests {
         #expect(transaction.appAccountToken == nil)
         #expect(!transaction.isUpgraded)
         #expect(transaction.purchasedQuantity == 1)
-        #expect(transaction.productType == .unknown)
         #expect(transaction.ownershipType == .purchased)
         #expect(!transaction.isFamilyShared)
         #expect(transaction.environment == .production)
@@ -92,6 +93,7 @@ struct StoreTransactionTests {
         let transaction = StoreTransaction(
             id: 1,
             productID: "pro.monthly",
+            productType: .autoRenewable,
             purchaseDate: purchasedAt,
             revocationDate: revokedAt
         )
@@ -106,9 +108,9 @@ struct StoreTransactionTests {
         let transaction = StoreTransaction(
             id: 5,
             productID: "pro.monthly",
+            productType: .autoRenewable,
             purchaseDate: purchasedAt,
             revocationDate: purchasedAt.addingTimeInterval(60),
-            productType: .autoRenewable,
             ownershipType: .familyShared,
             environment: .sandbox,
             reason: .renewal,
@@ -176,6 +178,6 @@ struct StoreTransactionTests {
         #expect(ownership.rawValue == "ASSIGNED")
         #expect(ownership != .purchased)
         #expect(ownership != .familyShared)
-        #expect(StoreTransaction(id: 1, productID: "a", purchaseDate: purchasedAt, ownershipType: ownership).isFamilyShared == false)
+        #expect(StoreTransaction(id: 1, productID: "a", productType: .nonConsumable, purchaseDate: purchasedAt, ownershipType: ownership).isFamilyShared == false)
     }
 }

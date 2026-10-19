@@ -14,7 +14,7 @@ conveniences on ``PurchasesProtocol`` and ``ServerVerifiedPurchasesProtocol`` th
 it, so they cannot drift apart from the options-based call.
 
 Every throwing method throws ``PurchasesError``; StoreKit's own errors are translated into
-its cases.
+its codes and kept as ``PurchasesError/underlyingError``.
 
 On iOS and visionOS the manager also wraps StoreKit's scene-based sheets. They run on the
 main actor and take the `UIWindowScene` that presents them:

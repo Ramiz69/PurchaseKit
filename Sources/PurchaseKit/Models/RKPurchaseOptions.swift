@@ -45,7 +45,7 @@ public struct PurchaseOptions: Sendable, Equatable {
     public var promotionalOffer: PromotionalOffer?
     /// The identifier of one of the product's ``StoreProduct/winBackOffers`` to apply.
     ///
-    /// The purchase throws ``PurchasesError/offerNotFound(_:)`` if the product has no such
+    /// The purchase throws ``PurchasesError/Code/offerNotFound`` if the product has no such
     /// offer.
     public var winBackOfferID: String?
     /// A compact JWS from your server that overrides the App Store's own introductory offer
@@ -80,7 +80,7 @@ public struct PurchaseOptions: Sendable, Equatable {
 
     /// Translates the options into the set StoreKit's `purchase` takes.
     ///
-    /// - Throws: ``PurchasesError/offerNotFound(_:)`` when ``winBackOfferID`` names an offer
+    /// - Throws: ``PurchasesError/Code/offerNotFound`` when ``winBackOfferID`` names an offer
     ///   the product does not have.
     func storeKitOptions(for product: Product) throws -> Set<Product.PurchaseOption> {
         try storeKitOptions(winBackOffers: product.subscription?.winBackOffers ?? [])
@@ -109,7 +109,7 @@ public struct PurchaseOptions: Sendable, Equatable {
             // StoreKit wants the offer itself. Failing here, by name, beats letting the
             // purchase go through at full price because the offer was silently dropped.
             guard let offer = winBackOffers.first(where: { $0.id == winBackOfferID }) else {
-                throw PurchasesError.offerNotFound(winBackOfferID)
+                throw PurchasesError(.offerNotFound, offerID: winBackOfferID)
             }
             options.insert(.winBackOffer(offer))
         }

@@ -76,7 +76,7 @@ struct PurchaseOptionsTests {
     func rejectsUnknownWinBackOffer() {
         let options = PurchaseOptions(winBackOfferID: "winback.half")
 
-        #expect(throws: PurchasesError.offerNotFound("winback.half")) {
+        #expect(throws: PurchasesError(.offerNotFound, offerID: "winback.half")) {
             try options.storeKitOptions(winBackOffers: [])
         }
     }

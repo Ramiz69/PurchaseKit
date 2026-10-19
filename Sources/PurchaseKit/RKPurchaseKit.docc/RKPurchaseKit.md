@@ -24,7 +24,7 @@
 
 - Actor-based, Swift Concurrency–first API
 - Product caching with instant repeat calls
-- Purchase & restore flows with typed errors - StoreKit's own errors arrive as ``PurchasesError`` cases
+- Purchase & restore flows with typed errors - StoreKit's own errors arrive as ``PurchasesError`` codes, matched with `catch PurchasesError.purchaseCancelled`
 - **Purchase options**: account token, quantity, promotional and win-back offers - ``PurchaseOptions``
 - Live transaction listening via `AsyncStream`
 - **Entitlement helpers**:

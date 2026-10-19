@@ -248,11 +248,12 @@ public struct StoreTransaction: Sendable {
     /// Use this in tests, previews and mock implementations of ``PurchasesProtocol``.
     /// ``transaction`` is `nil` on the result.
     ///
-    /// `productType` defaults to ``ProductType/unknown`` rather than a guess, so code under
-    /// test that branches on it has to be given the type it expects.
+    /// `productType` is required: a transaction is always for some kind of product, and any
+    /// default would be a guess that code under test could silently branch on.
     public init(
         id: UInt64,
         productID: String,
+        productType: ProductType,
         purchaseDate: Date,
         originalID: UInt64? = nil,
         originalPurchaseDate: Date? = nil,
@@ -263,7 +264,6 @@ public struct StoreTransaction: Sendable {
         appAccountToken: UUID? = nil,
         subscriptionGroupID: String? = nil,
         jwsRepresentation: String? = nil,
-        productType: ProductType = .unknown,
         ownershipType: OwnershipType = .purchased,
         environment: StoreEnvironment = .production,
         reason: Reason = .purchase,

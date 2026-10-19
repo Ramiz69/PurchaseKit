@@ -82,7 +82,7 @@ struct ServerVerifiedPurchasesTests {
         func activeSubscription(inGroup groupID: String) async -> StoreProduct? { nil }
         func subscriptionStatuses(inGroup groupID: String) async throws -> [StoreSubscriptionStatus] { [] }
         func isEligibleForIntroOffer(inGroup groupID: String) async -> Bool { true }
-        func appPurchaseInfo() async throws -> AppPurchaseInfo { throw PurchasesError.unsupported }
+        func appPurchaseInfo() async throws -> AppPurchaseInfo { throw PurchasesError(.unsupported) }
 
         var finishedIDs: [UInt64] { state.withLock { $0.finished } }
 
@@ -92,12 +92,13 @@ struct ServerVerifiedPurchasesTests {
         ) throws -> (product: StoreProduct, transaction: StoreTransaction) {
             receivedOptions.withLock { $0.append(options) }
             let token = options.appAccountToken
-            guard productID == coins.productID else { throw PurchasesError.invalidProductID(productID) }
+            guard productID == coins.productID else { throw PurchasesError(.invalidProductID, productID: productID) }
 
             let transaction = state.withLock { state -> StoreTransaction in
                 let transaction = StoreTransaction(
                     id: state.nextID,
                     productID: productID,
+                    productType: coins.type,
                     purchaseDate: Date(timeIntervalSince1970: 1_700_000_000),
                     appAccountToken: token,
                     jwsRepresentation: "header.payload-\(state.nextID).signature"
@@ -117,10 +118,11 @@ struct ServerVerifiedPurchasesTests {
         let signed = StoreTransaction(
             id: 1,
             productID: "coins.100",
+            productType: .consumable,
             purchaseDate: Date(timeIntervalSince1970: 0),
             jwsRepresentation: "a.b.c"
         )
-        let unsigned = StoreTransaction(id: 2, productID: "coins.100", purchaseDate: Date(timeIntervalSince1970: 0))
+        let unsigned = StoreTransaction(id: 2, productID: "coins.100", productType: .consumable, purchaseDate: Date(timeIntervalSince1970: 0))
 
         #expect(signed.jwsRepresentation == "a.b.c")
         #expect(unsigned.jwsRepresentation == nil)

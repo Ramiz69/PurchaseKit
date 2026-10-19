@@ -23,7 +23,7 @@ In Package.swift:
 ### ✅ Features
 - async/await API
 - actor-based PurchasesManager
-- Typed errors: StoreKit failures arrive as `PurchasesError` cases (`networkUnavailable`, `purchaseNotAllowed`, …)
+- Typed errors: StoreKit failures arrive as `PurchasesError` codes (`networkUnavailable`, `purchaseNotAllowed`, …), matched with `catch PurchasesError.purchaseCancelled`
 - Purchase options: account token, quantity, promotional offers (server-signed JWS), win-back offers
 - Subscription status: renewal info, grace period and billing retry, intro-offer eligibility, live status updates
 - Subscription bundles and suites (`ProductType.isAutoRenewableSubscription`)
@@ -93,8 +93,10 @@ In SwiftUI, StoreKit's `PurchaseAction` from the environment resolves the scene 
 
 Call sites mostly compile unchanged. What breaks:
 
-- **`ProductType`** gained `subscriptionBundle` and `subscriptionSuite`, and **`PurchasesError`** gained cases for StoreKit's own failures. Exhaustive `switch` statements need the new cases or a `default` branch.
-- **StoreKit errors are now `PurchasesError`.** A `catch let error as StoreKitError` no longer matches; catch the case instead (`.networkUnavailable`, `.purchaseNotAllowed`, …).
+- **`ProductType` is a struct** with StoreKit's raw values, so a kind Apple adds later is no longer a breaking change. A `switch` over it needs a `default` branch; `ProductType.unknown` is gone (an unfamiliar kind keeps its raw value instead); `subscriptionBundle` and `subscriptionSuite` are new.
+- **`PurchasesError` is a struct with a `code`**, like `CocoaError`. `catch PurchasesError.purchaseCancelled` still works; read details with `catch let error as PurchasesError where error.code == .invalidProductID` and `error.productID` / `error.offerID` / `error.underlyingError`. A `switch` goes over `error.code` and needs a `default` branch. Throw it as `PurchasesError(.invalidProductID, productID: id)`.
+- **StoreKit errors are now `PurchasesError`.** A `catch let error as StoreKitError` no longer matches; catch the code instead (`.networkUnavailable`, `.purchaseNotAllowed`, …). The StoreKit error is kept as `underlyingError`.
+- **`StoreTransaction(…)`** requires `productType:` after `productID:`.
 - **`PurchasesProtocol` mocks** implement `purchase(productID:options:)` instead of `purchase(productID:)`, plus `subscriptionStatuses(inGroup:)`, `isEligibleForIntroOffer(inGroup:)` and `appPurchaseInfo()`. `ServerVerifiedPurchasesProtocol` no longer requires `purchase(productID:appAccountToken:)`; both short forms are extension methods now.
 - **`StoreProduct(…)`** requires `currencyCode:` after `displayPrice:`.
 - **`activeSubscriptions()`** now includes subscription bundles and suites.

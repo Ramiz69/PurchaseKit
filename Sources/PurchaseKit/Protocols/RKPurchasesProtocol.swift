@@ -43,9 +43,9 @@ public protocol PurchasesProtocol: Sendable {
     ///     ``PurchaseOptions/none`` for a plain purchase.
     /// - Returns: The verified ``StoreProduct`` that has just been purchased, and the
     ///   ``StoreTransaction`` describing the purchase.
-    /// - Throws: ``PurchasesError``, for example ``PurchasesError/purchaseCancelled``,
-    ///   ``PurchasesError/purchasePending``, ``PurchasesError/verificationFailed``,
-    ///   ``PurchasesError/invalidProductID(_:)`` or ``PurchasesError/offerNotFound(_:)``.
+    /// - Throws: ``PurchasesError``, for example ``PurchasesError/Code/purchaseCancelled``,
+    ///   ``PurchasesError/Code/purchasePending``, ``PurchasesError/Code/verificationFailed``,
+    ///   ``PurchasesError/Code/invalidProductID`` or ``PurchasesError/Code/offerNotFound``.
     func purchase(
         productID: String,
         options: PurchaseOptions
@@ -66,9 +66,9 @@ public protocol PurchasesProtocol: Sendable {
     ///   - scene: The scene the system uses to show the purchase confirmation.
     /// - Returns: The verified ``StoreProduct`` that has just been purchased, and the
     ///   ``StoreTransaction`` describing the purchase.
-    /// - Throws: ``PurchasesError``, for example ``PurchasesError/purchaseCancelled``,
-    ///   ``PurchasesError/purchasePending``, ``PurchasesError/verificationFailed``,
-    ///   ``PurchasesError/invalidProductID(_:)`` or ``PurchasesError/offerNotFound(_:)``.
+    /// - Throws: ``PurchasesError``, for example ``PurchasesError/Code/purchaseCancelled``,
+    ///   ``PurchasesError/Code/purchasePending``, ``PurchasesError/Code/verificationFailed``,
+    ///   ``PurchasesError/Code/invalidProductID`` or ``PurchasesError/Code/offerNotFound``.
     @MainActor
     func purchase(
         productID: String,
@@ -120,7 +120,7 @@ public protocol PurchasesProtocol: Sendable {
     func isEligibleForIntroOffer(inGroup groupID: String) async -> Bool
     /// Returns how and when the customer got the app itself.
     ///
-    /// - Throws: ``PurchasesError/verificationFailed`` if the app transaction fails
+    /// - Throws: ``PurchasesError/Code/verificationFailed`` if the app transaction fails
     ///   verification, or another ``PurchasesError`` if StoreKit cannot read it.
     func appPurchaseInfo() async throws -> AppPurchaseInfo
 }

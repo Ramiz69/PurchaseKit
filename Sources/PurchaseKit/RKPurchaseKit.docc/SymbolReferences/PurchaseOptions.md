@@ -23,11 +23,11 @@ let (_, transaction) = try await PurchasesManager.shared
 - ``promotionalOffer`` – an offer ID and the compact JWS your server signed for it.
 - ``winBackOfferID`` – the ``SubscriptionOffer/id`` of one of the product's
   ``StoreProduct/winBackOffers``. An ID the product does not have throws
-  ``PurchasesError/offerNotFound(_:)`` before the purchase sheet appears.
+  ``PurchasesError/Code/offerNotFound`` before the purchase sheet appears.
 - ``introductoryOfferEligibilityJWS`` – a server-signed decision on whether this customer gets
   the introductory offer, overriding the App Store's own check.
 - ``simulatesAskToBuyInSandbox`` – makes a sandbox purchase go through Ask to Buy, so you can
-  test ``PurchasesError/purchasePending`` and the later approval.
+  test ``PurchasesError/Code/purchasePending`` and the later approval.
 
 Signed values are produced on your server with your In-App Purchase key, never in the app:
 the key must not ship in the binary. See <doc:Subscriptions>.

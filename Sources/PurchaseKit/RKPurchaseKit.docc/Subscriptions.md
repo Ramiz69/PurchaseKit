@@ -117,7 +117,7 @@ let (_, transaction) = try await PurchasesManager.shared
     .purchase(productID: product.productID, options: options)
 ```
 
-A rejected offer throws ``PurchasesError/ineligibleForOffer`` or ``PurchasesError/invalidOffer``.
+A rejected offer throws ``PurchasesError/Code/ineligibleForOffer`` or ``PurchasesError/Code/invalidOffer``.
 
 ## Win back lapsed subscribers
 
@@ -138,7 +138,7 @@ if let product, let offer = product.winBackOffers.first, let offerID = offer.id 
 
 Fetch with `includingCache: false` before showing a win-back screen: eligibility is evaluated
 when StoreKit returns the product, and a cached product can be stale. An ID the product does
-not offer throws ``PurchasesError/offerNotFound(_:)`` before the purchase sheet appears.
+not offer throws ``PurchasesError/Code/offerNotFound`` before the purchase sheet appears.
 
 ## Observe status changes
 

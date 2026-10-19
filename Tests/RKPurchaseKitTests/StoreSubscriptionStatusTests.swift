@@ -28,10 +28,10 @@ struct SubscriptionStatusTests {
             transaction: StoreTransaction(
                 id: id,
                 productID: "pro.monthly",
+                productType: .autoRenewable,
                 purchaseDate: now,
                 expirationDate: interval.map { now.addingTimeInterval($0) },
-                subscriptionGroupID: "group.pro",
-                productType: .autoRenewable
+                subscriptionGroupID: "group.pro"
             )
         )
     }
@@ -44,7 +44,7 @@ struct SubscriptionStatusTests {
         let status = StoreSubscriptionStatus(
             state: .inGracePeriod,
             groupID: "group.pro",
-            transaction: StoreTransaction(id: 9, productID: "pro.monthly", purchaseDate: now),
+            transaction: StoreTransaction(id: 9, productID: "pro.monthly", productType: .autoRenewable, purchaseDate: now),
             willAutoRenew: true,
             autoRenewProductID: "pro.yearly",
             renewalDate: renewal,

@@ -53,7 +53,7 @@ extension PurchasesManager {
     /// ``StoreSubscriptionStatus`` for the rules.
     ///
     /// - Parameter groupID: Subscription group identifier as configured in App Store Connect.
-    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its cases.
+    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its codes.
     public nonisolated func subscriptionStatuses(inGroup groupID: String) async throws -> [StoreSubscriptionStatus] {
         do {
             return try await Product.SubscriptionInfo.status(for: groupID).compactMap(StoreSubscriptionStatus.init)

@@ -29,7 +29,7 @@ extension PurchasesManager {
     ///   - scene: The window scene that presents the sheet.
     ///   - groupID: A subscription group to focus the sheet on, or `nil` for all of the
     ///     customer's subscriptions to this app.
-    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its cases.
+    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its codes.
     @MainActor
     public func showManageSubscriptions(in scene: UIWindowScene, groupID: String? = nil) async throws {
         do {
@@ -52,7 +52,7 @@ extension PurchasesManager {
     ///   - transactionID: ``StoreTransaction/id`` of the purchase to refund.
     ///   - scene: The window scene that presents the sheet.
     /// - Returns: Whether the customer submitted the request.
-    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its cases.
+    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its codes.
     @MainActor
     public func beginRefundRequest(for transactionID: UInt64, in scene: UIWindowScene) async throws -> RefundRequestStatus {
         do {
@@ -68,7 +68,7 @@ extension PurchasesManager {
     /// like a purchase made on another device.
     ///
     /// - Parameter scene: The window scene that presents the sheet.
-    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its cases.
+    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its codes.
     @MainActor
     public func presentOfferCodeRedeemSheet(in scene: UIWindowScene) async throws {
         do {

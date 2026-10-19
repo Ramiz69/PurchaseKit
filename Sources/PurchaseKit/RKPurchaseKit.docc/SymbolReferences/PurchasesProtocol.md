@@ -19,7 +19,7 @@ struct PurchasesMock: PurchasesProtocol {
         productID: String,
         options: PurchaseOptions
     ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
-        throw PurchasesError.purchaseCancelled
+        throw PurchasesError(.purchaseCancelled)
     }
     func restore() async throws { }
     func hasEntitlement(for productID: String) async -> Bool { productID == "com.myapp.pro" }
@@ -28,7 +28,7 @@ struct PurchasesMock: PurchasesProtocol {
     func activeSubscription(inGroup groupID: String) async -> StoreProduct? { nil }
     func subscriptionStatuses(inGroup groupID: String) async throws -> [StoreSubscriptionStatus] { [] }
     func isEligibleForIntroOffer(inGroup groupID: String) async -> Bool { true }
-    func appPurchaseInfo() async throws -> AppPurchaseInfo { throw PurchasesError.unsupported }
+    func appPurchaseInfo() async throws -> AppPurchaseInfo { throw PurchasesError(.unsupported) }
 }
 ```
 
