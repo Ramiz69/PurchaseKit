@@ -1,7 +1,7 @@
 # RKPurchaseKit
 
-[![Swift](https://img.shields.io/badge/swift-6.2-orange.svg)](https://swift.org)
-[![Platforms](https://img.shields.io/badge/platforms-iOS%2026%20%7C%20macOS%2026%20%7C%20watchOS%2026%20%7C%20tvOS%2026%20%7C%20visionOS%2026-blue)]()
+[![Swift versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FRamiz69%2FPurchaseKit%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/Ramiz69/PurchaseKit)
+[![Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FRamiz69%2FPurchaseKit%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/Ramiz69/PurchaseKit)
 
 A lightweight Swift framework for in-app purchases using StoreKit 2  
 with full support for Swift Concurrency, async/await, and SPM.
@@ -31,7 +31,6 @@ In Package.swift:
 - App purchase info (`AppTransaction`) for paid-to-free migrations
 - Every model has a public initializer, so `PurchasesProtocol` is fully mockable
 - DocC documentation
-- Static linking support (type: .static)
 - Support for iOS, macOS, Mac Catalyst, tvOS, watchOS, visionOS (26 and later)
 
 ### 🔁 Subscription status
