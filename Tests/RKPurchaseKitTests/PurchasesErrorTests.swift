@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import StoreKit
 import Testing
 @testable import RKPurchaseKit
 
@@ -19,6 +20,17 @@ struct PurchasesErrorTests {
         .purchasePending,
         .verificationFailed,
         .unhandledPurchaseResult,
+        .productUnavailable,
+        .purchaseNotAllowed,
+        .invalidQuantity,
+        .ineligibleForOffer,
+        .invalidOffer,
+        .paymentMethodBindingRequired,
+        .networkUnavailable,
+        .notAvailableInStorefront,
+        .notEntitled,
+        .unsupported,
+        .offerNotFound("winback.half"),
         .invalidProductID("pro.monthly")
     ])
     func equatesMatchingCases(error: PurchasesError) {
@@ -35,6 +47,9 @@ struct PurchasesErrorTests {
     func comparesAssociatedIdentifier() {
         #expect(PurchasesError.invalidProductID("a") == PurchasesError.invalidProductID("a"))
         #expect(PurchasesError.invalidProductID("a") != PurchasesError.invalidProductID("b"))
+        #expect(PurchasesError.offerNotFound("a") == PurchasesError.offerNotFound("a"))
+        #expect(PurchasesError.offerNotFound("a") != PurchasesError.offerNotFound("b"))
+        #expect(PurchasesError.offerNotFound("a") != PurchasesError.invalidProductID("a"))
     }
 
     @Test("a wrapped error participates in equality")
@@ -52,6 +67,17 @@ struct PurchasesErrorTests {
         .purchasePending,
         .verificationFailed,
         .unhandledPurchaseResult,
+        .productUnavailable,
+        .purchaseNotAllowed,
+        .invalidQuantity,
+        .ineligibleForOffer,
+        .invalidOffer,
+        .paymentMethodBindingRequired,
+        .networkUnavailable,
+        .notAvailableInStorefront,
+        .notEntitled,
+        .unsupported,
+        .offerNotFound("winback.half"),
         .invalidProductID("pro.monthly"),
         .unknown(NSError(domain: "test", code: 1))
     ])
@@ -70,6 +96,17 @@ struct PurchasesErrorTests {
         .purchasePending,
         .verificationFailed,
         .unhandledPurchaseResult,
+        .productUnavailable,
+        .purchaseNotAllowed,
+        .invalidQuantity,
+        .ineligibleForOffer,
+        .invalidOffer,
+        .paymentMethodBindingRequired,
+        .networkUnavailable,
+        .notAvailableInStorefront,
+        .notEntitled,
+        .unsupported,
+        .offerNotFound("winback.half"),
         .invalidProductID("pro.monthly")
     ])
     func avoidsTheGenericFallback(error: PurchasesError) {
@@ -92,5 +129,88 @@ struct PurchasesErrorTests {
         )
 
         #expect(PurchasesError.unknown(underlying).localizedDescription == "Network unreachable")
+    }
+
+    @Test("the missing offer identifier appears in its description")
+    func namesTheMissingOffer() {
+        #expect(PurchasesError.offerNotFound("winback.half").localizedDescription.contains("winback.half"))
+    }
+
+    // MARK: Mapping
+
+    @Test(
+        "maps StoreKit purchase errors",
+        arguments: [
+            (Product.PurchaseError.productUnavailable, PurchasesError.productUnavailable),
+            (.purchaseNotAllowed, .purchaseNotAllowed),
+            (.invalidQuantity, .invalidQuantity),
+            (.ineligibleForOffer, .ineligibleForOffer),
+            (.invalidOfferIdentifier, .invalidOffer),
+            (.invalidOfferPrice, .invalidOffer),
+            (.invalidOfferSignature, .invalidOffer),
+            (.missingOfferParameters, .invalidOffer)
+        ]
+    )
+    func mapsPurchaseErrors(storeKitError: Product.PurchaseError, expected: PurchasesError) {
+        #expect(PurchasesError.mapping(storeKitError) == expected)
+    }
+
+    /// The case is new in 26.5, so it can only be built where the running system has it.
+    @Test("maps the payment method binding error where the system has it")
+    func mapsPaymentMethodBinding() {
+        guard #available(iOS 26.5, macOS 26.5, tvOS 26.5, watchOS 26.5, visionOS 26.5, *) else {
+            return
+        }
+
+        let error = Product.PurchaseError.paymentMethodBindingConfigurationRequired
+
+        #expect(PurchasesError.mapping(error) == .paymentMethodBindingRequired)
+    }
+
+    @Test(
+        "maps StoreKit framework errors",
+        arguments: [
+            (StoreKitError.userCancelled, PurchasesError.purchaseCancelled),
+            (.networkError(URLError(.notConnectedToInternet)), .networkUnavailable),
+            (.notAvailableInStorefront, .notAvailableInStorefront),
+            (.notEntitled, .notEntitled),
+            (.unsupported, .unsupported)
+        ]
+    )
+    func mapsStoreKitErrors(storeKitError: StoreKitError, expected: PurchasesError) {
+        #expect(PurchasesError.mapping(storeKitError) == expected)
+    }
+
+    /// Anything without a dedicated case is kept, not replaced, so its own description and
+    /// identity survive for logging.
+    @Test("wraps an unrecognised StoreKit error instead of discarding it")
+    func wrapsUnknownStoreKitError() {
+        let mapped = PurchasesError.mapping(StoreKitError.unknown)
+
+        guard case .unknown(let wrapped) = mapped else {
+            Issue.record("expected .unknown, got \(mapped)")
+            return
+        }
+        #expect(wrapped is StoreKitError)
+    }
+
+    @Test("wraps a foreign error")
+    func wrapsForeignError() {
+        let underlying = NSError(domain: "test", code: 3)
+
+        #expect(PurchasesError.mapping(underlying) == .unknown(underlying))
+    }
+
+    /// Public entry points may wrap errors thrown by inner calls that already wrapped them;
+    /// a second pass must not bury the real case inside `.unknown`.
+    @Test("an existing PurchasesError passes through unchanged", arguments: [
+        PurchasesError.purchaseCancelled,
+        .offerNotFound("winback.half"),
+        .invalidProductID("pro.monthly"),
+        .unknown(NSError(domain: "test", code: 4))
+    ])
+    func passesThroughOwnErrors(error: PurchasesError) {
+        #expect(PurchasesError.mapping(error) == error)
+        #expect(PurchasesError.mapping(PurchasesError.mapping(error)) == error)
     }
 }

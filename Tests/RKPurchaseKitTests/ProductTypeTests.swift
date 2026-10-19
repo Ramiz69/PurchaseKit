@@ -36,4 +36,36 @@ struct ProductTypeTests {
         #expect(ProductType(future) == .unknown)
         #expect(ProductType(future) != .nonConsumable)
     }
+
+    /// The OS 27 constants cannot be referenced while CI builds with the OS 26 SDKs, so these
+    /// kinds are recognised by StoreKit's raw strings, verified against the 27.1 SDK.
+    @Test(
+        "maps the OS 27 subscription kinds by raw value",
+        arguments: [
+            ("Subscription Bundle", ProductType.subscriptionBundle),
+            ("Subscription Suite", ProductType.subscriptionSuite)
+        ]
+    )
+    func mapsBundleAndSuite(rawValue: String, expected: ProductType) {
+        #expect(ProductType(rawValue: rawValue) == expected)
+        #expect(ProductType(Product.ProductType(rawValue: rawValue)) == expected)
+    }
+
+    /// Bundles and suites renew like any subscription; code that compared with
+    /// `.autoRenewable` alone would quietly treat them as one-off purchases.
+    @Test(
+        "every renewing kind counts as an auto-renewable subscription",
+        arguments: [
+            (ProductType.autoRenewable, true),
+            (.subscriptionBundle, true),
+            (.subscriptionSuite, true),
+            (.nonRenewable, false),
+            (.consumable, false),
+            (.nonConsumable, false),
+            (.unknown, false)
+        ]
+    )
+    func flagsAutoRenewableKinds(type: ProductType, expected: Bool) {
+        #expect(type.isAutoRenewableSubscription == expected)
+    }
 }

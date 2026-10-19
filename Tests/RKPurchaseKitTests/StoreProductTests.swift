@@ -21,6 +21,7 @@ struct StoreProductTests {
             description: "Everything, billed monthly",
             price: 4.99,
             displayPrice: "$4.99",
+            currencyCode: "USD",
             isFamilyShareable: true,
             isPurchased: isPurchased,
             subscriptionGroupID: "group.pro"
@@ -43,6 +44,50 @@ struct StoreProductTests {
         #expect(product.isFamilyShareable)
         #expect(product.isPurchased)
         #expect(product.subscriptionGroupID == "group.pro")
+        #expect(product.currencyCode == "USD")
+    }
+
+    @Test("subscription details can be supplied")
+    func buildsSubscriptionDetails() {
+        let month = StoreSubscriptionPeriod(value: 1, unit: .month)
+        let trial = SubscriptionOffer(
+            id: nil,
+            type: .introductory,
+            paymentMode: .freeTrial,
+            price: 0,
+            displayPrice: "$0.00",
+            period: StoreSubscriptionPeriod(value: 1, unit: .week),
+            periodCount: 1
+        )
+        let comeBack = SubscriptionOffer(
+            id: "winback.half",
+            type: .winBack,
+            paymentMode: .payAsYouGo,
+            price: 2.49,
+            displayPrice: "$2.49",
+            period: month,
+            periodCount: 3
+        )
+
+        let product = StoreProduct(
+            productID: "pro.monthly",
+            type: .autoRenewable,
+            displayName: "Pro Monthly",
+            description: "Everything, billed monthly",
+            price: 4.99,
+            displayPrice: "$4.99",
+            currencyCode: "USD",
+            subscriptionGroupID: "group.pro",
+            subscriptionPeriod: month,
+            introductoryOffer: trial,
+            promotionalOffers: [],
+            winBackOffers: [comeBack]
+        )
+
+        #expect(product.subscriptionPeriod == month)
+        #expect(product.introductoryOffer == trial)
+        #expect(product.promotionalOffers.isEmpty)
+        #expect(product.winBackOffers == [comeBack])
     }
 
     @Test("optional details default to absent")
@@ -53,12 +98,17 @@ struct StoreProductTests {
             displayName: "Small Tip",
             description: "Thanks",
             price: 0.99,
-            displayPrice: "$0.99"
+            displayPrice: "$0.99",
+            currencyCode: "USD"
         )
 
         #expect(!product.isFamilyShareable)
         #expect(!product.isPurchased)
         #expect(product.subscriptionGroupID == nil)
+        #expect(product.subscriptionPeriod == nil)
+        #expect(product.introductoryOffer == nil)
+        #expect(product.promotionalOffers.isEmpty)
+        #expect(product.winBackOffers.isEmpty)
     }
 
     /// `setPurchasingFlag` used to rebuild the value from its backing `StoreKit.Product`,
@@ -87,6 +137,7 @@ struct StoreProductTests {
         #expect(updated.displayPrice == product.displayPrice)
         #expect(updated.isFamilyShareable == product.isFamilyShareable)
         #expect(updated.subscriptionGroupID == product.subscriptionGroupID)
+        #expect(updated.currencyCode == product.currencyCode)
     }
 
     @Test("an event can be built around a product")
