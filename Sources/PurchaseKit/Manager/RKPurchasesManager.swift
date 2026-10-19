@@ -15,9 +15,14 @@ public import UIKit
 /// ``PurchasesManager`` – entry point to `RKPurchaseKit`.
 ///
 /// The manager is an `actor` and is therefore safe to use from concurrent contexts.
-/// It holds a product cache, listens for `Transaction.updates`, and exposes a simple
-/// API for fetching products, purchasing, restoring, and querying current entitlements.
+/// It holds a product cache, listens for `Transaction.updates` and subscription status
+/// updates, and exposes a simple API for fetching products, purchasing, restoring, and
+/// querying current entitlements and subscription state.
 /// See <doc:PurchasesManager> for the overview.
+///
+/// Split across files by topic: subscriptions live in `RKPurchasesManager+Subscriptions.swift`
+/// and the scene-based App Store sheets in `RKPurchasesManager+StoreSheets.swift`. The state
+/// they share is therefore `internal` rather than `private`.
 public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
 
     // MARK: Properties
@@ -36,10 +41,10 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
     /// error. Use this where the caller can react instead — a plug-in surface, or a path
     /// that may run before ``configure(identifiers:finishing:)``.
     ///
-    /// - Throws: ``PurchasesError/notConfigured``.
+    /// - Throws: ``PurchasesError/Code/notConfigured``.
     public nonisolated static func resolved() throws -> PurchasesManager {
         guard let instance = storage.withLock({ $0 }) else {
-            throw PurchasesError.notConfigured
+            throw PurchasesError(.notConfigured)
         }
 
         return instance
@@ -68,13 +73,32 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
     public nonisolated var transactionUpdates: AsyncStream<StoreTransaction> {
         transactionBroadcaster.makeStream()
     }
+    /// Every renewal status StoreKit reports while the app runs: renewals, expirations,
+    /// billing failures, plan changes, refunds.
+    ///
+    /// Same delivery rules as ``purchasedProducts``: every access returns a fresh stream,
+    /// events are not replayed, and a slow subscriber drops the oldest. Read the current
+    /// state with ``PurchasesProtocol/subscriptionStatus(inGroup:)`` when a subscriber
+    /// starts. Statuses whose transaction fails verification are not delivered.
+    public nonisolated var subscriptionStatusUpdates: AsyncStream<StoreSubscriptionStatus> {
+        statusBroadcaster.makeStream()
+    }
     /// Who finishes transactions, fixed at ``configure(identifiers:finishing:)``.
     public nonisolated let finishPolicy: FinishPolicy
+    /// Configured identifiers StoreKit did not return on the last fetch by
+    /// ``requestProducts(includingCache:)``.
+    ///
+    /// `Product.products(for:)` drops an unknown identifier silently instead of failing, so a
+    /// typo or a product that is not yet "Ready to Submit" otherwise shows up only as a
+    /// paywall that is one row short. Empty until the first fetch.
+    public private(set) var unavailableProductIDs: Set<String> = []
     private let identifiers: [String]
-    private var productsCache: [String: StoreProduct] = [:]
+    var productsCache: [String: StoreProduct] = [:]
     private let broadcaster = EventBroadcaster<PurchasedProductEvent>()
     private let transactionBroadcaster = EventBroadcaster<StoreTransaction>()
+    private let statusBroadcaster = EventBroadcaster<StoreSubscriptionStatus>()
     private var updateListenerTask: Task<Void, Never>?
+    private var statusListenerTask: Task<Void, Never>?
     /// Backing store for ``shared``.
     ///
     /// `nonisolated(unsafe)` opted the singleton out of the compiler's checking without
@@ -96,8 +120,10 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
 
     deinit {
         updateListenerTask?.cancel()
+        statusListenerTask?.cancel()
         broadcaster.finish()
         transactionBroadcaster.finish()
+        statusBroadcaster.finish()
     }
 
     // MARK: Public methods
@@ -129,6 +155,7 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
         }
         Task.detached {
             await instance.startListener()
+            await instance.startStatusListener()
         }
 
         return instance
@@ -136,7 +163,9 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
     /// Fetches products from StoreKit (optionally returns cache first).
     ///
     /// If cache is used, entitlements are refreshed asynchronously so the
-    /// `isPurchased` flag remains accurate.
+    /// `isPurchased` flag remains accurate. A fetch also updates ``unavailableProductIDs``.
+    ///
+    /// - Throws: ``PurchasesError`` if StoreKit lookup fails.
     public func requestProducts(includingCache: Bool = true) async throws -> [StoreProduct] {
         if includingCache {
             let cachedProducts = configuredProducts
@@ -145,46 +174,58 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
                 return cachedProducts
             }
         }
-        let storeProducts = try await Product.products(for: identifiers)
-        for product in storeProducts {
-            cache(product)
+        let storeProducts: [Product]
+        do {
+            storeProducts = try await Product.products(for: identifiers)
+        } catch {
+            throw PurchasesError.mapping(error)
         }
+        for product in storeProducts {
+            // Keep the flag the cache already holds. Re-caching as unpurchased made the
+            // refresh below see every entitled product flip back to `true` and announce it
+            // as a new purchase on every uncached fetch.
+            cache(product, purchased: productsCache[product.id]?.isPurchased ?? false)
+        }
+        unavailableProductIDs = Set(identifiers).subtracting(storeProducts.map(\.id))
         await updateCustomerProductStatus()
 
         return configuredProducts
     }
     #if !os(visionOS)
-    /// Performs a purchase flow for the given product identifier.
+    /// Performs a purchase flow for the given product identifier with `options` applied.
+    ///
+    /// The one purchase path: `purchase(productID:)` and `purchase(productID:appAccountToken:)`
+    /// are protocol conveniences that build the options and land here.
+    ///
+    /// With an ``PurchaseOptions/appAccountToken`` StoreKit signs the token into the
+    /// transaction, so a server can refuse to credit a purchase made for a different account.
+    /// Under ``FinishPolicy/manual`` the returned transaction is unfinished: send
+    /// ``StoreTransaction/jwsRepresentation`` to the server, then call ``finish(_:)``.
     ///
     /// Not available on visionOS, where StoreKit has no purchase call without a scene to
-    /// present the confirmation in. Use `purchase(productID:confirmIn:)` there.
-    public func purchase(productID: String) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
-        try await purchase(productID: productID, appAccountToken: nil)
-    }
-    /// Buys `productID` on behalf of the account identified by `appAccountToken`.
+    /// present the confirmation in. Use `purchase(productID:options:confirmIn:)` there.
     ///
-    /// StoreKit signs the token into the transaction, so a server can refuse to credit a
-    /// purchase made for a different account. Under ``FinishPolicy/manual`` the returned
-    /// transaction is unfinished: send ``StoreTransaction/jwsRepresentation`` to the server,
-    /// then call ``finish(_:)``.
-    ///
-    /// Not available on visionOS. Use `purchase(productID:appAccountToken:confirmIn:)` there.
+    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its codes.
     public func purchase(
         productID: String,
-        appAccountToken: UUID?
+        options: PurchaseOptions
     ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
-        let product = try await storeKitProduct(for: productID)
+        do {
+            let product = try await storeKitProduct(for: productID)
+            // Resolved before StoreKit is asked, so an unknown win-back offer fails by name
+            // instead of the sheet appearing at full price.
+            let storeKitOptions = try options.storeKitOptions(for: product)
 
-        return try await finishPurchase(
-            try await product.purchase(options: Self.options(appAccountToken: appAccountToken)),
-            of: product
-        )
+            return try await finishPurchase(try await product.purchase(options: storeKitOptions), of: product)
+        } catch {
+            throw PurchasesError.mapping(error)
+        }
     }
     #endif
 
     #if os(visionOS)
-    /// Performs a purchase flow for the given product identifier, presenting the App Store
-    /// confirmation in `scene`.
+    /// Performs a purchase flow for the given product identifier with `options` applied,
+    /// presenting the App Store confirmation in `scene`.
     ///
     /// visionOS has no purchase call without a scene: `Product.purchase(options:)` is
     /// unavailable there, because a spatial app can show several windows and the system has
@@ -192,32 +233,31 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
     /// interacted with. In SwiftUI, prefer StoreKit's `PurchaseAction` from the environment,
     /// which resolves the scene for you.
     ///
+    /// The one purchase path on visionOS: `purchase(productID:confirmIn:)` and
+    /// `purchase(productID:appAccountToken:confirmIn:)` are protocol conveniences that land
+    /// here.
+    ///
     /// Runs on the main actor because StoreKit presents UI in `scene`; the entitlement
     /// bookkeeping afterwards still happens on this actor.
-    @MainActor
-    public func purchase(
-        productID: String,
-        confirmIn scene: UIScene
-    ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
-        try await purchase(productID: productID, appAccountToken: nil, confirmIn: scene)
-    }
-    /// Buys `productID` on behalf of the account identified by `appAccountToken`, presenting
-    /// the App Store confirmation in `scene`.
     ///
-    /// See ``purchase(productID:confirmIn:)`` for why visionOS needs the scene.
+    /// - Throws: ``PurchasesError``; StoreKit's own errors are translated into its codes.
     @MainActor
     public func purchase(
         productID: String,
-        appAccountToken: UUID?,
+        options: PurchaseOptions,
         confirmIn scene: UIScene
     ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
-        let product = try await storeKitProduct(for: productID)
-        let result = try await product.purchase(
-            confirmIn: scene,
-            options: Self.options(appAccountToken: appAccountToken)
-        )
+        do {
+            let product = try await storeKitProduct(for: productID)
+            // Resolved before StoreKit is asked, so an unknown win-back offer fails by name
+            // instead of the sheet appearing at full price.
+            let storeKitOptions = try options.storeKitOptions(for: product)
+            let result = try await product.purchase(confirmIn: scene, options: storeKitOptions)
 
-        return try await finishPurchase(result, of: product)
+            return try await finishPurchase(result, of: product)
+        } catch {
+            throw PurchasesError.mapping(error)
+        }
     }
     #endif
     /// Finishes `transaction`, telling the App Store it has been delivered.
@@ -287,24 +327,31 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
                 transaction: StoreTransaction(transaction: transaction, jwsRepresentation: result.jwsRepresentation)
             )
         case .userCancelled:
-            throw PurchasesError.purchaseCancelled
+            throw PurchasesError(.purchaseCancelled)
         case .pending:
-            throw PurchasesError.purchasePending
+            throw PurchasesError(.purchasePending)
         default:
             // `Product.PurchaseResult` is non-frozen, so a StoreKit release can add a case
             // this SDK predates.
-            throw PurchasesError.unhandledPurchaseResult
+            throw PurchasesError(.unhandledPurchaseResult)
         }
     }
     /// Syncs with the App Store and refreshes current entitlements.
+    ///
+    /// - Throws: ``PurchasesError``; a dismissed sign-in prompt is
+    ///   ``PurchasesError/Code/purchaseCancelled``.
     public func restore() async throws {
-        try await AppStore.sync()
+        do {
+            try await AppStore.sync()
+        } catch {
+            throw PurchasesError.mapping(error)
+        }
         await refreshEntitlements()
     }
     /// Returns `true` if the user currently has an active entitlement for `productID`.
     ///
-    /// Always resolved against `Transaction.currentEntitlements`, and the cached flag is brought
-    /// into line with the answer in both directions.
+    /// Always resolved against `Transaction.currentEntitlements(for:)`, and the cached flag is
+    /// brought into line with the answer in both directions.
     public func hasEntitlement(for productID: String) async -> Bool {
         // StoreKit is asked every time. A cached `false` may only mean the entitlement has not
         // been read yet — a purchase made on another device, or a cold start before the first
@@ -312,11 +359,15 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
         // entitlement too: a revocation StoreKit never announces through `Transaction.updates`,
         // such as a cleared `SKTestSession`, left the product looking purchased for as long as
         // the process ran.
+        //
+        // Asked per product: scanning every entitlement to find one cost a full walk of the
+        // customer's purchases on every check. A product can hold several entitlements (a
+        // family-shared one beside an own purchase), so any unrevoked one answers yes.
         var isEntitled = false
-        for await result in Transaction.currentEntitlements {
+        for await result in Transaction.currentEntitlements(for: productID) {
             guard let transaction = try? checkVerified(result) else { continue }
 
-            if transaction.productID == productID, transaction.revocationDate == nil {
+            if transaction.revocationDate == nil {
                 isEntitled = true
                 break
             }
@@ -345,63 +396,29 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
 
         return ids
     }
-    /// Returns all active **auto-renewable** subscriptions mapped to ``StoreProduct``.
+    /// Returns how and when the customer got the app itself.
     ///
-    /// If a product is not yet cached, it will be fetched from StoreKit and cached.
-    public func activeSubscriptions() async -> [StoreProduct] {
-        if productsCache.isEmpty {
-            _ = try? await requestProducts(includingCache: true)
-        }
-        var result: [StoreProduct] = []
-        for await resultTransaction in Transaction.currentEntitlements {
-            guard let transaction = try? checkVerified(resultTransaction),
-                  transaction.revocationDate == nil
-            else { continue }
+    /// - Throws: ``PurchasesError/Code/verificationFailed`` if the app transaction fails
+    ///   verification, or another ``PurchasesError`` if StoreKit cannot read it.
+    public nonisolated func appPurchaseInfo() async throws -> AppPurchaseInfo {
+        do {
+            let result = try await AppTransaction.shared
 
-            if let product = productsCache[transaction.productID], product.type == .autoRenewable {
-                result.append(product)
-            } else if productsCache[transaction.productID] == nil {
-                if let fetched = try? await Product.products(for: [transaction.productID]).first {
-                    cache(fetched, purchased: true)
-                    if let storeProduct = productsCache[transaction.productID], storeProduct.type == .autoRenewable {
-                        result.append(storeProduct)
-                    }
-                }
-            }
+            return AppPurchaseInfo(appTransaction: try checkVerified(result), jwsRepresentation: result.jwsRepresentation)
+        } catch {
+            throw PurchasesError.mapping(error)
         }
-        return result
     }
-    /// Returns the best active subscription for the given subscription group.
+    /// The ISO 3166-1 alpha-3 country code of the App Store storefront the customer uses, or
+    /// `nil` when StoreKit cannot tell (no account signed in, no connection).
     ///
-    /// If multiple entitlements from the same group are present, the one with the latest
-    /// expiration date is returned.
-    /// - Parameter groupID: Subscription group identifier as configured in App Store Connect.
-    public func activeSubscription(inGroup groupID: String) async -> StoreProduct? {
-        var best: (product: StoreProduct, expires: Date?)?
-        if productsCache.isEmpty {
-            _ = try? await requestProducts(includingCache: true)
-        }
-        for await resultTransaction in Transaction.currentEntitlements {
-            guard let transaction = try? checkVerified(resultTransaction),
-                  transaction.revocationDate == nil
-            else { continue }
-
-            // Keep only auto-renewable subscriptions belonging to the requested group.
-            if let product = try? await storeProduct(for: transaction.productID),
-               product.type == .autoRenewable,
-               product.subscriptionGroupID == groupID
-            {
-                // Auto-renewable transactions normally carry an expiration date.
-                let expiration = transaction.expirationDate
-                if best == nil || compare(expiration, isLaterThan: best?.expires) {
-                    best = (product, expiration)
-                }
-            }
-        }
-        return best?.product
+    /// Prices and the availability of a product follow the storefront, not the device
+    /// region, so this is the value to branch on for storefront-specific offers or copy.
+    public nonisolated func currentStorefrontCountryCode() async -> String? {
+        await Storefront.current?.countryCode
     }
 
-    // MARK: Private methods
+    // MARK: Internal and private methods
 
     /// Cached products for the configured identifiers, in the order passed to
     /// ``configure(identifiers:finishing:)``.
@@ -428,9 +445,29 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
             }
         }
     }
+    /// Starts relaying `Product.SubscriptionInfo.Status.updates` to
+    /// ``subscriptionStatusUpdates``.
+    ///
+    /// A second task rather than a branch of the transaction listener: the two sequences are
+    /// independent and never end, so one loop cannot wait on both. Same weak-`self` capture,
+    /// for the same reason as ``startListener()``.
+    private func startStatusListener() {
+        guard statusListenerTask == nil else { return }
+
+        statusListenerTask = Task { [weak self] in
+            for await status in Product.SubscriptionInfo.Status.updates {
+                guard let self else { return }
+                // An unverified transaction makes the status a claim nobody signed; dropping
+                // it matches what `subscriptionStatuses(inGroup:)` returns for the same input.
+                guard let mapped = StoreSubscriptionStatus(status) else { continue }
+
+                self.statusBroadcaster.yield(mapped)
+            }
+        }
+    }
 
     @discardableResult
-    private func cache(_ product: Product, purchased: Bool = false) -> StoreProduct {
+    func cache(_ product: Product, purchased: Bool = false) -> StoreProduct {
         let stored = map(product, purchased)
         productsCache[product.id] = stored
 
@@ -441,10 +478,13 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
         StoreProduct(product: product, isPurchased: isPurchased)
     }
     /// Verifies StoreKit's `VerificationResult` and returns the signed value.
-    private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
+    ///
+    /// `nonisolated` because it reads no state, so the calls that touch nothing else on the
+    /// actor need not hop onto it.
+    nonisolated func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
         switch result {
         case .verified(let signed): signed
-        case .unverified: throw PurchasesError.verificationFailed
+        case .unverified: throw PurchasesError(.verificationFailed)
         }
     }
     private func updateCustomerProductStatus() async {
@@ -481,11 +521,8 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
             else { continue }
 
             entitled.insert(transaction.productID)
-            if productsCache[transaction.productID] == nil,
-               let fetched = try? await Product.products(for: [transaction.productID]).first {
-                cache(fetched)
-            }
         }
+        await cacheMissingProducts(entitled)
 
         // Apply the difference rather than clearing every flag and setting it again. The
         // clear-then-reapply pass left every entitled product looking newly purchased on each
@@ -504,13 +541,23 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
             }
         }
     }
-    /// Ensures a ``StoreProduct`` for `productID`, fetching it if needed.
-    private func storeProduct(for productID: String) async throws -> StoreProduct {
-        if let cached = productsCache[productID] {
-            return cached
-        }
+    /// Caches every product in `productIDs` that the cache does not hold yet, with one
+    /// `Product.products(for:)` request.
+    ///
+    /// Entitlements used to be resolved one product per request, so a customer with many
+    /// purchases cost as many round trips on every refresh. A failed fetch leaves the cache as
+    /// it was; the next refresh tries again.
+    ///
+    /// - Parameter purchased: The flag to cache new products with.
+    func cacheMissingProducts(_ productIDs: Set<String>, purchased: Bool = false) async {
+        let missing = productIDs.filter { productsCache[$0] == nil }
+        guard !missing.isEmpty, let fetched = try? await Product.products(for: missing) else { return }
 
-        return cache(try await fetchProduct(for: productID))
+        // Re-checked after the suspension: another call on this actor may have cached one of
+        // these meanwhile, and its flag is newer than the one this call was given.
+        for product in fetched where productsCache[product.id] == nil {
+            cache(product, purchased: purchased)
+        }
     }
     /// Returns the StoreKit product for `productID`, reusing the cached one when there is one.
     ///
@@ -526,23 +573,9 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
 
     private func fetchProduct(for productID: String) async throws -> Product {
         guard let fetched = try await Product.products(for: [productID]).first else {
-            throw PurchasesError.invalidProductID(productID)
+            throw PurchasesError(.invalidProductID, productID: productID)
         }
 
         return fetched
-    }
-
-    private static func options(appAccountToken: UUID?) -> Set<Product.PurchaseOption> {
-        guard let appAccountToken else { return [] }
-
-        return [.appAccountToken(appAccountToken)]
-    }
-
-    private func compare(_ lhs: Date?, isLaterThan rhs: Date?) -> Bool {
-        switch (lhs, rhs) {
-        case let (l?, r?): l > r
-        case (.some, .none): true
-        default: false
-        }
     }
 }

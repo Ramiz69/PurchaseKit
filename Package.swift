@@ -16,7 +16,6 @@ let package = Package(
     products: [
         .library(
             name: "RKPurchaseKit",
-            type: .static,
             targets: ["RKPurchaseKit"]
         ),
     ],
