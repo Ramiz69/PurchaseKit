@@ -25,13 +25,15 @@ struct ServerVerifiedPurchasesTests {
     /// A stand-in that behaves like a manual-finishing manager backed by a fake App Store.
     private final class FakeStore: ServerVerifiedPurchasesProtocol {
         private let state = Mutex<(unfinished: [StoreTransaction], finished: [UInt64], nextID: UInt64)>(([], [], 1))
+        let receivedOptions = Mutex<[PurchaseOptions]>([])
         let coins = StoreProduct(
             productID: "coins.100",
             type: .consumable,
             displayName: "100 coins",
             description: "A pack of coins",
             price: 0.99,
-            displayPrice: "$0.99"
+            displayPrice: "$0.99",
+            currencyCode: "USD"
         )
 
         var transactionUpdates: AsyncStream<StoreTransaction> {
@@ -40,30 +42,23 @@ struct ServerVerifiedPurchasesTests {
 
         func requestProducts(includingCache: Bool) async throws -> [StoreProduct] { [coins] }
 
+        // The 4.0 shape: the token arrives inside the options, and the account-token
+        // purchase is a protocol convenience this type does not implement.
         #if os(visionOS)
         @MainActor
-        func purchase(productID: String, confirmIn scene: UIScene) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
-            try await purchase(productID: productID, appAccountToken: nil, confirmIn: scene)
-        }
-
-        @MainActor
         func purchase(
             productID: String,
-            appAccountToken: UUID?,
+            options: PurchaseOptions,
             confirmIn scene: UIScene
         ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
-            try buy(productID, appAccountToken)
+            try buy(productID, options)
         }
         #else
-        func purchase(productID: String) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
-            try await purchase(productID: productID, appAccountToken: nil)
-        }
-
         func purchase(
             productID: String,
-            appAccountToken: UUID?
+            options: PurchaseOptions
         ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
-            try buy(productID, appAccountToken)
+            try buy(productID, options)
         }
         #endif
 
@@ -85,10 +80,18 @@ struct ServerVerifiedPurchasesTests {
         func entitlementProductIDs() async -> Set<String> { [] }
         func activeSubscriptions() async -> [StoreProduct] { [] }
         func activeSubscription(inGroup groupID: String) async -> StoreProduct? { nil }
+        func subscriptionStatuses(inGroup groupID: String) async throws -> [StoreSubscriptionStatus] { [] }
+        func isEligibleForIntroOffer(inGroup groupID: String) async -> Bool { true }
+        func appPurchaseInfo() async throws -> AppPurchaseInfo { throw PurchasesError.unsupported }
 
         var finishedIDs: [UInt64] { state.withLock { $0.finished } }
 
-        private func buy(_ productID: String, _ token: UUID?) throws -> (product: StoreProduct, transaction: StoreTransaction) {
+        private func buy(
+            _ productID: String,
+            _ options: PurchaseOptions
+        ) throws -> (product: StoreProduct, transaction: StoreTransaction) {
+            receivedOptions.withLock { $0.append(options) }
+            let token = options.appAccountToken
             guard productID == coins.productID else { throw PurchasesError.invalidProductID(productID) }
 
             let transaction = state.withLock { state -> StoreTransaction in
@@ -153,6 +156,31 @@ struct ServerVerifiedPurchasesTests {
         await store.finish(bought)
 
         #expect(store.finishedIDs == [bought.id])
+    }
+
+    /// The account-token purchase is an extension in 4.0. It must hand the token to the
+    /// options-based requirement and add nothing else, so the purchase is otherwise plain.
+    @Test("purchase(productID:appAccountToken:) forwards the token as the only option")
+    func accountTokenPurchaseForwardsToken() async throws {
+        let store = FakeStore()
+        let account = UUID()
+
+        _ = try await store.purchase(productID: "coins.100", appAccountToken: account)
+        _ = try await store.purchase(productID: "coins.100", appAccountToken: nil)
+
+        #expect(store.receivedOptions.withLock { $0 } == [PurchaseOptions(appAccountToken: account), PurchaseOptions.none])
+    }
+
+    @Test("the convenience reaches the requirement through any ServerVerifiedPurchasesProtocol")
+    func accountTokenPurchaseWorksThroughExistential() async throws {
+        let store = FakeStore()
+        let purchases: any ServerVerifiedPurchasesProtocol = store
+        let account = UUID()
+
+        let bought = try await purchases.purchase(productID: "coins.100", appAccountToken: account).transaction
+
+        #expect(bought.appAccountToken == account)
+        #expect(await purchases.unfinishedTransactions().map(\.id) == [bought.id])
     }
     #endif
 

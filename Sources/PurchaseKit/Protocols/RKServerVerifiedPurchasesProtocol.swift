@@ -17,9 +17,9 @@ public import UIKit
 /// transaction to its server, and finishes it only after the server has credited it.
 /// Configure the manager with ``FinishPolicy/manual`` for this flow.
 ///
-/// A separate protocol rather than new requirements on ``PurchasesProtocol``: adding
-/// requirements there would break every existing conformer, including the stand-ins apps
-/// write for tests and previews. ``PurchasesManager`` conforms to both.
+/// A separate protocol so that ``PurchasesProtocol`` conformers that never take this flow -
+/// most stand-ins for tests and previews - are not asked to model unfinished transactions.
+/// ``PurchasesManager`` conforms to both.
 public protocol ServerVerifiedPurchasesProtocol: PurchasesProtocol {
     /// Every verified transaction StoreKit delivers outside a purchase call: a purchase
     /// approved later (Ask to Buy, a pending payment), one made on another device, and
@@ -29,28 +29,6 @@ public protocol ServerVerifiedPurchasesProtocol: PurchasesProtocol {
     /// missed here stays unfinished under ``FinishPolicy/manual`` - read it back with
     /// ``unfinishedTransactions()``.
     var transactionUpdates: AsyncStream<StoreTransaction> { get }
-
-    #if !os(visionOS)
-    /// Buys `productID` on behalf of the account identified by `appAccountToken`.
-    ///
-    /// The token travels inside the signed transaction, so the server can check that the
-    /// purchase belongs to the account it is about to credit.
-    func purchase(
-        productID: String,
-        appAccountToken: UUID?
-    ) async throws -> (product: StoreProduct, transaction: StoreTransaction)
-    #endif
-
-    #if os(visionOS)
-    /// Buys `productID` on behalf of the account identified by `appAccountToken`,
-    /// presenting the App Store confirmation in `scene`.
-    @MainActor
-    func purchase(
-        productID: String,
-        appAccountToken: UUID?,
-        confirmIn scene: UIScene
-    ) async throws -> (product: StoreProduct, transaction: StoreTransaction)
-    #endif
 
     /// Finishes `transaction`, telling the App Store it has been delivered.
     ///
@@ -63,4 +41,48 @@ public protocol ServerVerifiedPurchasesProtocol: PurchasesProtocol {
     /// Read at launch and after sign-in to forward whatever a previous run did not manage to
     /// deliver to the server.
     func unfinishedTransactions() async -> [StoreTransaction]
+}
+
+// MARK: - Conveniences
+
+/// The account-token purchase, expressed through ``PurchaseOptions``.
+///
+/// In 3.x this was a requirement. The token is now one option among several, so keeping a
+/// second purchase requirement would let a conformer's two purchase paths disagree; as an
+/// extension it can only ever forward.
+public extension ServerVerifiedPurchasesProtocol {
+    #if !os(visionOS)
+    /// Buys `productID` on behalf of the account identified by `appAccountToken`.
+    ///
+    /// The token travels inside the signed transaction, so the server can check that the
+    /// purchase belongs to the account it is about to credit. Forwards to
+    /// ``PurchasesProtocol/purchase(productID:options:)`` with
+    /// `PurchaseOptions(appAccountToken:)`.
+    func purchase(
+        productID: String,
+        appAccountToken: UUID?
+    ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
+        try await purchase(productID: productID, options: PurchaseOptions(appAccountToken: appAccountToken))
+    }
+    #endif
+
+    #if os(visionOS)
+    /// Buys `productID` on behalf of the account identified by `appAccountToken`,
+    /// presenting the App Store confirmation in `scene`.
+    ///
+    /// Forwards to `purchase(productID:options:confirmIn:)` with
+    /// `PurchaseOptions(appAccountToken:)`.
+    @MainActor
+    func purchase(
+        productID: String,
+        appAccountToken: UUID?,
+        confirmIn scene: UIScene
+    ) async throws -> (product: StoreProduct, transaction: StoreTransaction) {
+        try await purchase(
+            productID: productID,
+            options: PurchaseOptions(appAccountToken: appAccountToken),
+            confirmIn: scene
+        )
+    }
+    #endif
 }
