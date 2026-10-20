@@ -2,6 +2,7 @@
 
 [![Swift versions](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FRamiz69%2FPurchaseKit%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/Ramiz69/PurchaseKit)
 [![Platforms](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2FRamiz69%2FPurchaseKit%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/Ramiz69/PurchaseKit)
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/Ramiz69/badge.svg)](https://hub.xerj.org/contributors/Ramiz69)
 
 A lightweight Swift framework for in-app purchases using StoreKit 2  
 with full support for Swift Concurrency, async/await, and SPM.
