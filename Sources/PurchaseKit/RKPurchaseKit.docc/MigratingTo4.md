@@ -262,6 +262,9 @@ struct PurchasesMock: PurchasesProtocol {
 }
 ```
 
+4.1 adds ``PurchasesProtocol/currentEntitlement(for:)`` with a default that returns `nil`, so
+this mock keeps compiling. Implement it as soon as the mock reports entitlements.
+
 Rename the old method rather than keeping it next to the new one. A leftover
 `purchase(productID:)` in the mock still compiles, but it no longer satisfies a requirement:
 code that holds `any PurchasesProtocol` calls the extension method instead, which forwards to

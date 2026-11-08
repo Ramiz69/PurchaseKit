@@ -301,3 +301,26 @@ public struct StoreTransaction: Sendable {
         self.currencyCode = currencyCode
     }
 }
+
+// MARK: - Entitlement selection
+
+extension StoreTransaction {
+    /// Picks the transaction that ``PurchasesProtocol/currentEntitlement(for:)`` reports.
+    ///
+    /// Revoked transactions are dropped. Of the rest, an own purchase wins over a
+    /// family-shared one: it cannot be withdrawn by someone else, and its date is the
+    /// customer's. Among equals the earliest ``purchaseDate`` wins, so the answer stays put
+    /// when another grant appears later; ``id`` breaks a remaining tie so the result never
+    /// depends on StoreKit's order.
+    ///
+    /// Kept apart from StoreKit so the rule can be tested with constructed values.
+    static func preferredEntitlement(among candidates: [StoreTransaction]) -> StoreTransaction? {
+        candidates
+            .filter { $0.revocationDate == nil }
+            .min { lhs, rhs in
+                if lhs.isFamilyShared != rhs.isFamilyShared { return !lhs.isFamilyShared }
+                if lhs.purchaseDate != rhs.purchaseDate { return lhs.purchaseDate < rhs.purchaseDate }
+                return lhs.id < rhs.id
+            }
+    }
+}

@@ -101,11 +101,21 @@ if hasPro {
     // unlock premium UI
 }
 ```
+When the answer needs a date, ask for the transaction instead. A free trial unlocked through
+a non-consumable is the typical case: its end is computed from the purchase date, which comes
+from the App Store, so it survives a reinstall and is the same on every device of the account.
+```swift
+if let trial = await PurchasesManager.shared.currentEntitlement(for: "com.myapp.trial") {
+    let trialEnds = trial.purchaseDate.addingTimeInterval(14 * 24 * 60 * 60)
+    // trial.isFamilyShared tells an own purchase from a Family Sharing grant
+}
+```
 Or quickly check all entitled product identifiers:
 ```swift
 let ids = await PurchasesManager.shared.entitlementProductIDs()
 ```
-See: ``PurchasesManager/hasEntitlement(for:)``, ``PurchasesManager/entitlementProductIDs()``
+See: ``PurchasesManager/hasEntitlement(for:)``, ``PurchasesManager/currentEntitlement(for:)``,
+``PurchasesManager/entitlementProductIDs()``
 ---
 ## 7  Work with subscriptions (groups) 
 
@@ -189,6 +199,11 @@ struct PurchasesMock: PurchasesProtocol {
 ```
 `purchase(productID:)` is not a requirement: it calls `purchase(productID:options:)` with
 ``PurchaseOptions/none``, so the mock above answers both.
+
+``PurchasesProtocol/currentEntitlement(for:)`` has a default that returns `nil`, so the mock
+compiles without it. A mock that reports an entitlement from `hasEntitlement(for:)` should
+answer it too, with a transaction built by ``StoreTransaction``'s public initializer;
+otherwise the two disagree.
 ---
 ## 9  Concurrency notes
 

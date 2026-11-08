@@ -87,6 +87,27 @@ public protocol PurchasesProtocol: Sendable {
     /// Uses `Transaction.currentEntitlements(for:)` under the hood.
     /// - Parameter productID: Product identifier to check.
     func hasEntitlement(for productID: String) async -> Bool
+    /// Returns the transaction that currently entitles the customer to `productID`, or `nil`
+    /// when nothing does.
+    ///
+    /// Reads `Transaction.currentEntitlements(for:)`, the same source as
+    /// ``hasEntitlement(for:)``: a non-`nil` result is exactly the case where that returns
+    /// `true`. Use it when the answer needs a date - when a free trial unlocked through a
+    /// non-consumable started, or since when a lifetime purchase has been owned - without
+    /// importing StoreKit. The transaction is the App Store's, so it survives a reinstall and
+    /// is the same on every device signed in to the account.
+    ///
+    /// Unverified and revoked transactions are skipped. When several remain - a family member
+    /// shares the product the customer also bought - the customer's own purchase wins over a
+    /// family-shared one, and among equals the earliest ``StoreTransaction/purchaseDate``
+    /// wins, so the answer does not move when a second grant appears later.
+    ///
+    /// A default implementation returns `nil`, so conformers written before 4.1 keep
+    /// compiling. A stand-in that reports an entitlement from ``hasEntitlement(for:)``
+    /// should implement this too, or the two will disagree.
+    ///
+    /// - Parameter productID: Product identifier to look up.
+    func currentEntitlement(for productID: String) async -> StoreTransaction?
     /// Returns the set of all product identifiers for which the user has an active entitlement.
     ///
     /// The result reflects **current** rights only (including grace period).
@@ -123,6 +144,20 @@ public protocol PurchasesProtocol: Sendable {
     /// - Throws: ``PurchasesError/Code/verificationFailed`` if the app transaction fails
     ///   verification, or another ``PurchasesError`` if StoreKit cannot read it.
     func appPurchaseInfo() async throws -> AppPurchaseInfo
+}
+
+// MARK: - Default implementations
+
+/// Defaults for requirements added after 4.0, so existing conformers keep compiling.
+public extension PurchasesProtocol {
+    /// Returns `nil`: a conformer that does not implement the requirement has no
+    /// transactions to report.
+    ///
+    /// ``PurchasesManager`` implements it against StoreKit. Implement it in a mock that
+    /// answers ``PurchasesProtocol/hasEntitlement(for:)`` with `true`.
+    func currentEntitlement(for productID: String) async -> StoreTransaction? {
+        nil
+    }
 }
 
 // MARK: - Conveniences

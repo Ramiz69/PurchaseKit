@@ -29,6 +29,7 @@
 - Live transaction listening via `AsyncStream`
 - **Entitlement helpers**:
   - ``PurchasesManager/hasEntitlement(for:)``
+  - ``PurchasesManager/currentEntitlement(for:)`` - the entitling transaction, with its dates
   - ``PurchasesManager/entitlementProductIDs()``
   - ``PurchasesManager/activeSubscriptions()``
   - ``PurchasesManager/activeSubscription(inGroup:)``
