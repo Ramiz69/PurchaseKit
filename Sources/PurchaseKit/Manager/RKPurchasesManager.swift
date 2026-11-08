@@ -372,16 +372,42 @@ public actor PurchasesManager: ServerVerifiedPurchasesProtocol {
                 break
             }
         }
-
-        if let cached = productsCache[productID], cached.isPurchased != isEntitled {
-            let updated = cached.setPurchasingFlag(isEntitled)
-            productsCache[productID] = updated
-            if isEntitled {
-                broadcaster.yield(PurchasedProductEvent(product: updated))
-            }
-        }
+        syncCachedFlag(for: productID, isEntitled: isEntitled)
 
         return isEntitled
+    }
+    /// Returns the transaction that currently entitles the customer to `productID`, or `nil`
+    /// when nothing does.
+    ///
+    /// Reads `Transaction.currentEntitlements(for:)` and, like ``hasEntitlement(for:)``,
+    /// brings the cached flag into line with the answer. Unverified and revoked transactions
+    /// are skipped; of the rest, the customer's own purchase wins over a family-shared one,
+    /// then the earliest ``StoreTransaction/purchaseDate``.
+    public func currentEntitlement(for productID: String) async -> StoreTransaction? {
+        // Every entitlement is collected rather than stopping at the first, unlike
+        // `hasEntitlement(for:)`: which one is returned matters here, and StoreKit's order
+        // is unspecified.
+        var candidates: [StoreTransaction] = []
+        for await result in Transaction.currentEntitlements(for: productID) {
+            guard let transaction = try? checkVerified(result) else { continue }
+
+            candidates.append(StoreTransaction(transaction: transaction, jwsRepresentation: result.jwsRepresentation))
+        }
+        let entitlement = StoreTransaction.preferredEntitlement(among: candidates)
+        syncCachedFlag(for: productID, isEntitled: entitlement != nil)
+
+        return entitlement
+    }
+    /// Sets the cached product's flag to `isEntitled`, emitting a
+    /// ``PurchasedProductEvent`` only when the product has just become entitled.
+    private func syncCachedFlag(for productID: String, isEntitled: Bool) {
+        guard let cached = productsCache[productID], cached.isPurchased != isEntitled else { return }
+
+        let updated = cached.setPurchasingFlag(isEntitled)
+        productsCache[productID] = updated
+        if isEntitled {
+            broadcaster.yield(PurchasedProductEvent(product: updated))
+        }
     }
     /// Returns the set of product identifiers for which the user has an active entitlement.
     public func entitlementProductIDs() async -> Set<String> {

@@ -18,7 +18,7 @@ https://github.com/Ramiz69/PurchaseKit.git
 ```
 In Package.swift:
 ```text
-.package(url: "https://github.com/Ramiz69/PurchaseKit.git", from: "4.0.0")
+.package(url: "https://github.com/Ramiz69/PurchaseKit.git", from: "4.1.0")
 ```
 
 ### ✅ Features
@@ -27,6 +27,7 @@ In Package.swift:
 - Typed errors: StoreKit failures arrive as `PurchasesError` codes (`networkUnavailable`, `purchaseNotAllowed`, …), matched with `catch PurchasesError.purchaseCancelled`
 - Purchase options: account token, quantity, promotional offers (server-signed JWS), win-back offers
 - Subscription status: renewal info, grace period and billing retry, intro-offer eligibility, live status updates
+- Dated entitlements: `currentEntitlement(for:)` returns the transaction behind an entitlement, e.g. to compute when a trial ends
 - Subscription bundles and suites (`ProductType.isAutoRenewableSubscription`)
 - Server-verified purchases with manual finishing
 - App purchase info (`AppTransaction`) for paid-to-free migrations

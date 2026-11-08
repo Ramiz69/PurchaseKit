@@ -49,6 +49,7 @@ the `UIScene` that presents the App Store confirmation, and the convenience is
 
 ### Entitlements & Subscriptions
 - ``hasEntitlement(for:)``
+- ``currentEntitlement(for:)``
 - ``entitlementProductIDs()``
 - ``activeSubscriptions()``
 - ``activeSubscription(inGroup:)``

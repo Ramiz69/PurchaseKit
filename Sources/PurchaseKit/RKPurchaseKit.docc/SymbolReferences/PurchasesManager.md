@@ -49,6 +49,7 @@ main actor and take the `UIWindowScene` that presents them:
 
 ### Entitlements & Subscriptions
 - ``hasEntitlement(for:)``
+- ``currentEntitlement(for:)``
 - ``entitlementProductIDs()``
 - ``activeSubscriptions()``
 - ``activeSubscription(inGroup:)``
