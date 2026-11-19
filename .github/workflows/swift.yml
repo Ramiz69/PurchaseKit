@@ -98,12 +98,20 @@ jobs:
         run: |
           echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=documentation/rkpurchasekit/"></head><body></body></html>' > docs/index.html
       
+      - name: Pack documentation
+        # DocC names a method's page after its signature, e.g. "init(productid:type:...)", and
+        # upload-artifact rejects colons in file names (an NTFS limit it applies everywhere).
+        # A single tar file carries those names through untouched. Without extended
+        # attributes: macOS tar stores them by default, and restoring them fails on the
+        # longest of these names when the archive is unpacked.
+        run: COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -cf docs.tar docs
+
       - name: Upload documentation
         # Uploaded on every run, so a pull request exercises this half of the hand-off too.
         uses: actions/upload-artifact@v7
         with:
           name: docs
-          path: docs
+          path: docs.tar
           retention-days: 1
 
   publish-docs:
@@ -123,14 +131,15 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: docs
-          path: docs-new
+          path: artifact
 
       - name: Commit and Push Docs to Main
         run: |
           # Replace the folder rather than copying over it, so pages that no longer exist are
           # removed instead of lingering on the site.
           rm -rf docs
-          mv docs-new docs
+          tar -xf artifact/docs.tar
+          rm -rf artifact
           git config user.name github-actions
           git config user.email github-actions@github.com
           git add docs
