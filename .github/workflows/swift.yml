@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main, development ]
 
+# Every job starts from read-only access. Only publish-docs gets write, and only on a push
+# to main, so a pull request never runs with a token that can push to the repository.
+permissions:
+  contents: read
+
 jobs:
   build-and-docs:
     # The package deploys to the OS 26 platforms, so the job needs an Xcode 26 SDK.
@@ -14,10 +19,11 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v7
 
       - name: Select Xcode
-        uses: maxim-lobanov/setup-xcode@v1
+        # Third-party action pinned to a commit: a tag can be moved to other code, a SHA cannot.
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: latest-stable
 
@@ -92,11 +98,50 @@ jobs:
         run: |
           echo '<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=documentation/rkpurchasekit/"></head><body></body></html>' > docs/index.html
       
+      - name: Pack documentation
+        # DocC names a method's page after its signature, e.g. "init(productid:type:...)", and
+        # upload-artifact rejects colons in file names (an NTFS limit it applies everywhere).
+        # A single tar file carries those names through untouched. Without extended
+        # attributes: macOS tar stores them by default, and restoring them fails on the
+        # longest of these names when the archive is unpacked.
+        run: COPYFILE_DISABLE=1 tar --no-xattrs --no-mac-metadata -cf docs.tar docs
+
+      - name: Upload documentation
+        # Uploaded on every run, so a pull request exercises this half of the hand-off too.
+        uses: actions/upload-artifact@v7
+        with:
+          name: docs
+          path: docs.tar
+          retention-days: 1
+
+  publish-docs:
+    # Split out of the build so that write access exists only here: this job runs only for a
+    # push to main and does nothing but commit the documentation the build produced.
+    needs: build-and-docs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download documentation
+        uses: actions/download-artifact@v8
+        with:
+          name: docs
+          path: artifact
+
       - name: Commit and Push Docs to Main
-        if: github.ref == 'refs/heads/main'
         run: |
-         git config user.name github-actions
-         git config user.email github-actions@github.com
-         git add docs
-         git commit -m "📚 Update documentation" --allow-empty
-         git push https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }} HEAD:main
+          # Replace the folder rather than copying over it, so pages that no longer exist are
+          # removed instead of lingering on the site.
+          rm -rf docs
+          tar -xf artifact/docs.tar
+          rm -rf artifact
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add docs
+          git commit -m "📚 Update documentation" --allow-empty
+          git push origin HEAD:main
